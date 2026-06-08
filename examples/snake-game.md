@@ -2,6 +2,8 @@
 
 A fully playable Snake game built with Jygame. Features classic and stage modes, multiple difficulties, and persistent high scores.
 
+> **Note:** This example was built with Jygame v0.2.0. The code snippets use the older `sprite.rect` API (`sprite.rect.x`, `sprite.rect.y`) which has been replaced by component properties (`sprite.transform.x`, `sprite.transform.y`, `sprite.collider.width`) in v0.4.0. The architectural patterns (scene flow, game loop, input handling, persistence) remain valid.
+
 <div class="snake-embed">
 
 <iframe src="https://jygame-snake.vercel.app/" title="Jygame Snake" allow="fullscreen" loading="lazy"></iframe>

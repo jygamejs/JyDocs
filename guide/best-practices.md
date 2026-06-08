@@ -67,33 +67,77 @@ update(dt) {
 }
 ```
 
-## Sprites
+## Components & Entities
 
-### Reuse Sprites Instead of Creating New Ones
+### Work with Components Directly
 
-For frequently spawned objects (bullets, particles), pool sprites:
+Sprites expose `transform`, `collider`, `renderable`, and `velocity`. Access them directly for fine-grained control:
 
 ```js
-class BulletPool {
-  constructor(size) {
-    this.pool = Array.from({ length: size }, () => new Sprite(0, 0, 4, 4))
-    this.pool.forEach(b => b.visible = false)
-  }
+sprite.transform.rotation = Math.PI / 2
+sprite.transform.scale.set(2, 1)
+sprite.collider.width = 64
+sprite.renderable.style.shape = 'ellipse'
+```
 
-  fire(x, y) {
-    const b = this.pool.find(b => !b.visible)
-    if (b) {
-      b.x = x
-      b.y = y
-      b.visible = true
+Note that `x` and `y` getters return the **top-left corner**, while `transform.x` / `transform.y` is **center-based**:
+
+```js
+const s = new Sprite(100, 100, 32, 32)
+s.x                   // 100 (top-left)
+s.transform.x         // 116 (center)
+```
+
+### Build Custom Entities
+
+Any object with the right component shape works with the built-in systems:
+
+```js
+const bullet = {
+  transform: new Transform(x, y),
+  collider: new Collider(4, 4),
+  renderable: new Renderable(null, { fill: '#ff0', shape: 'circle' }),
+  velocity: new Vec2(0, -300),
+  visible: true,
+}
+
+movementSystem.updateOne(bullet, dt)
+renderSystem.renderOne(ctx, bullet)
+```
+
+## Sprites
+
+### Use `Pool` for Frequently Spawned Objects
+
+For frequently spawned objects (bullets, particles), use the built-in `Pool` class instead of manual pooling:
+
+```js
+const bulletPool = new Pool({
+  create: () => new Sprite(0, 0, 4, 4),
+  reset: (b) => {
+    b.visible = false
+    b.velocity.set(0, 0)
+    b.transform.x = 0
+    b.transform.y = 0
+  },
+  initialSize: 50,
+  maxSize: 200,
+})
+
+function fire(x, y, vx, vy) {
+  const b = bulletPool.acquire()
+  b.transform.x = x
+  b.transform.y = y
+  b.velocity.set(vx, vy)
+  b.visible = true
+  return b
+}
+
+function update(dt) {
+  for (const b of activeBullets) {
+    if (outOfBounds(b)) {
+      bulletPool.release(b)
     }
-    return b
-  }
-
-  update(dt) {
-    this.pool.forEach(b => {
-      if (b.visible) b.update(dt)
-    })
   }
 }
 ```
@@ -104,13 +148,38 @@ class BulletPool {
 sprite.kill()  // removes from all groups it belongs to
 ```
 
-### Prefer `sprite.rect` for Direct Manipulation
+## Groups & Spatial Hashing
 
-The sprite's `x`, `y`, `width`, `height` delegate to its internal `Rect`. For bulk operations, work with `sprite.rect` directly:
+### Enable Spatial Hash for Large Groups
+
+For groups with more than ~50 sprites, enable spatial hashing to accelerate collision queries:
 
 ```js
-sprite.rect.move(dx, dy)
-sprite.rect.inset(5)
+const enemies = new Group()
+enemies.useSpatialHash(64)  // cell size in pixels
+enemies.add(enemy1)
+// ...
+```
+
+The hash is automatically rebuilt when `update()` is called. Without spatial hash, collision queries are O(n) per group.
+
+### Use `collideGroup()` for Group-vs-Group
+
+```js
+const hits = this.bullets.collideGroup(this.enemies)
+hits.forEach(([bullet, enemy]) => {
+  bullet.kill()
+  enemy.health--
+})
+```
+
+### All Collision Methods Accept `out` for Pool Reuse
+
+```js
+const out = []
+group.collideRect(rect, out)
+// use out, then clear
+out.length = 0
 ```
 
 ## Input
@@ -149,31 +218,34 @@ if (Input.justPressed('JUMP')) jump()
 
 `game.switchScene()` clears input state automatically. When using raw DOM listeners, clean them up via `this.on()`.
 
-## Groups
+### Pointer API for Multi-Touch
 
-### Use Groups for Collision Detection
-
-Groups provide built-in collision queries. Use `collideGroup()` for group-vs-group (e.g., bullets vs enemies):
+For multi-touch games, use the pointer API directly:
 
 ```js
-const hits = this.bullets.collideGroup(this.enemies)
-hits.forEach(([bullet, enemy]) => {
-  bullet.kill()
-  enemy.health--
+Input.forEachPointer(p => {
+  if (p.pointerType === 'touch') {
+    // handle touch input
+  }
 })
 ```
 
-### Prefer `collideRect` Over Manual Loops
+## Scene Event Cleanup
+
+Always use `this.on()` instead of raw `addEventListener` to ensure listeners are cleaned up on scene exit:
 
 ```js
-// ❌ Bad
-this.sprites.forEach(s => {
-  if (s.rect.collides(player.rect)) hit(s)
-})
-
-// ✅ Good
-this.sprites.collideRect(player.rect).forEach(hit)
+scene.enter = function () {
+  this.on(document, 'keydown', this.handleKey)
+  this.onSwipe(dir => this.move(dir))
+  this.onTap(({ x, y }) => this.placeItem(x, y))
+  this.cleanup(() => {
+    // any custom teardown
+  })
+}
 ```
+
+No manual `removeEventListener` is needed — `scene.exit()` runs all cleanups automatically.
 
 ## Game Loop
 
@@ -199,7 +271,7 @@ render(ctx) {
 
 ### Pause the Game Loop Properly
 
-Use `game.pause()` / `game.resume()` instead of manual flags. The loop stops calling `update()` but `render()` still runs (allowing a dimmed overlay).
+Use `game.pause()` / `game.resume()` instead of manual flags. The loop stops calling `update()` but `render()` still runs (allowing a dimmed overlay). Auto-pause handles tab visibility automatically.
 
 ```js
 if (Input.justPressed('ESCAPE')) {
@@ -240,13 +312,19 @@ Load all assets in a boot or menu scene, then switch to gameplay:
 ```js
 class BootScene extends Scene {
   async enter() {
-    this.assets = await ImageLoader.loadAll({
+    const task = ImageLoader.loadAll({
       player: 'player.png',
       enemy: 'enemy.png',
       bg: 'background.png',
     })
-    await FontLoader.load('Pixel', 'pixel.woff2')
-    this.transitionTo(new MenuScene(this.assets))
+
+    task.onProgress((loaded, total) => {
+      console.log(`${Math.round(loaded / total * 100)}%`)
+    })
+
+    const assets = await task
+    await FontLoader.loadAll({ Pixel: 'pixel.woff2' })
+    this.transitionTo(new MenuScene(assets))
   }
 }
 ```
@@ -255,9 +333,9 @@ class BootScene extends Scene {
 
 ```js
 try {
-  await ImageLoader.load('missing.png')
-} catch {
-  console.warn('Failed to load asset')
+  const assets = await ImageLoader.loadAll({ ... })
+} catch (err) {
+  console.warn('Failed to load assets:', err)
 }
 ```
 
@@ -265,7 +343,11 @@ try {
 
 ### Keep Sprite Count Manageable
 
-Batch static sprites by rendering them to an offscreen canvas. Only update and re-render sprites that change.
+For very large numbers of static sprites, batch them by rendering to an offscreen canvas. Only update and re-render sprites that change.
+
+### Enable Spatial Hash for Large Groups
+
+Groups with many sprites benefit significantly from spatial hashing — it reduces collision checks from O(n²) to roughly O(n).
 
 ### Minimize DOM UI Updates
 
@@ -282,3 +364,7 @@ this.enemies = this.enemies.filter(s => s.health > 0)
 ### Use `visible` to Hide Sprites
 
 Setting `sprite.visible = false` skips rendering without destroying the sprite. Useful for pooling.
+
+### Use Pool-Friendly Code Paths
+
+Methods like `group.collideRect(rect, out)`, `rect.getCenter(out)`, and `Vec2.lerpInto(out, a, b, t)` accept an optional output parameter to avoid allocations in hot paths.

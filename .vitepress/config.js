@@ -19,7 +19,7 @@ export default defineConfig({
       { text: 'API Reference', link: '/api/game' },
       { text: 'Examples', link: '/examples/' },
       {
-        text: 'v0.2.0',
+        text: 'v0.4.0',
         items: [
           { text: 'GitHub', link: 'https://github.com/Bouzidi-Youssef/Jygame' },
           { text: 'npm', link: 'https://www.npmjs.com/package/jygame' },
@@ -48,6 +48,21 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Components',
+          items: [
+            { text: 'Transform', link: '/api/transform' },
+            { text: 'Collider', link: '/api/collider' },
+            { text: 'Renderable', link: '/api/renderable' },
+          ],
+        },
+        {
+          text: 'Systems',
+          items: [
+            { text: 'MovementSystem', link: '/api/movement-system' },
+            { text: 'RenderSystem', link: '/api/render-system' },
+          ],
+        },
+        {
           text: 'Display',
           items: [
             { text: 'Sprite', link: '/api/sprite' },
@@ -65,6 +80,7 @@ export default defineConfig({
           text: 'Input',
           items: [
             { text: 'Input', link: '/api/input' },
+            { text: 'InputContext', link: '/api/input-context' },
           ],
         },
         {
@@ -78,6 +94,7 @@ export default defineConfig({
           text: 'Collision',
           items: [
             { text: 'Collision', link: '/api/collision' },
+            { text: 'SpatialHash', link: '/api/spatial-hash' },
           ],
         },
         {
@@ -92,6 +109,13 @@ export default defineConfig({
           items: [
             { text: 'ImageLoader', link: '/api/image-loader' },
             { text: 'FontLoader', link: '/api/font-loader' },
+            { text: 'LoadingTask', link: '/api/loading-task' },
+          ],
+        },
+        {
+          text: 'Memory',
+          items: [
+            { text: 'Pool', link: '/api/pool' },
           ],
         },
         {

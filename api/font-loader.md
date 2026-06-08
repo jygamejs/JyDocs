@@ -19,16 +19,23 @@ await FontLoader.load('PixelFont', '/fonts/pixel.woff2')
 ### `loadAll(map)`
 
 ```js
-await FontLoader.loadAll(map)
+const task = FontLoader.loadAll(map)
+await task
 ```
 
-Loads multiple fonts in parallel.
+Loads multiple fonts in parallel. Returns a **`LoadingTask`** (thenable with progress tracking).
 
 ```js
-await FontLoader.loadAll({
+const task = FontLoader.loadAll({
   PixelFont: '/fonts/pixel.woff2',
   'MonoFont': '/fonts/mono.woff2',
 })
+
+task.onProgress((loaded, total) => {
+  console.log(`${loaded}/${total} fonts loaded`)
+})
+
+await task
 ```
 
 ### `isLoaded(family)`
@@ -45,15 +52,37 @@ if (FontLoader.isLoaded('PixelFont')) {
 }
 ```
 
+### `unload(family)`
+
+```js
+FontLoader.unload(family)  // boolean
+```
+
+Removes a font family from the loaded set. Returns `true` if the family was loaded.
+
+### `clear()`
+
+```js
+FontLoader.clear()
+```
+
+Empties the entire set of loaded fonts.
+
 ## Usage
 
 ```js
 // Preload in boot scene
 async function boot() {
-  await FontLoader.loadAll({
+  const task = FontLoader.loadAll({
     Pixel: '/fonts/pixel.woff2',
     Retro: '/fonts/retro.ttf',
   })
+
+  task.onProgress((loaded, total) => {
+    console.log(`Fonts: ${loaded}/${total}`)
+  })
+
+  await task
 }
 
 // Use in render

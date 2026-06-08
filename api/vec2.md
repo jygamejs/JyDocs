@@ -15,7 +15,7 @@ const v = new Vec2(3, 4)
 ## Properties
 
 | Property | Type | Default |
-|---|---|---|
+|----------|------|---------|
 | `x` | `number` | `0` |
 | `y` | `number` | `0` |
 
@@ -24,8 +24,9 @@ const v = new Vec2(3, 4)
 Unless noted, all methods **mutate and return `this`**.
 
 | Method | Signature | Returns | Description |
-|---|---|---|---|
+|--------|-----------|---------|-------------|
 | `set(x, y)` | `set(3, 4)` | `this` | Sets both components |
+| `setFrom(v)` | `setFrom(vec2)` | `this` | Copies x/y from another vector (no allocation) |
 | `add(v)` | `add(vec2)` | `this` | Adds another vector in place |
 | `sub(v)` | `sub(vec2)` | `this` | Subtracts another vector in place |
 | `scale(s)` | `scale(2)` | `this` | Multiplies both components by scalar |
@@ -42,9 +43,10 @@ Unless noted, all methods **mutate and return `this`**.
 ## Static Methods
 
 | Method | Signature | Returns | Description |
-|---|---|---|---|
+|--------|-----------|---------|-------------|
 | `fromAngle(angle, length)` | `fromAngle(Math.PI, 50)` | `Vec2` | Creates a vector from angle (radians) and optional length (default 1) |
-| `lerp(a, b, t)` | `lerp(v1, v2, 0.5)` | `Vec2` | Linear interpolation between two vectors |
+| `lerp(a, b, t)` | `lerp(v1, v2, 0.5)` | `Vec2` | Linear interpolation between two vectors (allocates) |
+| `lerpInto(out, a, b, t)` | `lerpInto(out, v1, v2, 0.5)` | `Vec2` | Linear interpolation into an existing vector (pool-friendly) |
 
 ## Usage
 
@@ -57,5 +59,9 @@ pos.add(vel.clone().scale(1 / 60))  // move by velocity over one frame
 const dir = pos.clone().sub(target).normalize()  // unit vector toward target
 const d = pos.dist(target)                       // distance to target
 
-const mid = Vec2.lerp(a, b, 0.5)                 // midpoint
+const mid = Vec2.lerp(a, b, 0.5)                 // midpoint (allocates)
+
+// Pool-friendly lerp (no allocation)
+const out = new Vec2()
+Vec2.lerpInto(out, a, b, 0.5)
 ```

@@ -1,6 +1,6 @@
 # Sprite
 
-The `Sprite` class is the basic drawable entity. It wraps position, velocity, dimensions, rotation, scale, a shape or image, and rendering.
+The `Sprite` class is the basic drawable entity. It is composed of **components** — `Transform` (position/rotation/scale), `Collider` (AABB size), `Renderable` (image/style), and a `velocity` Vec2 — with dedicated systems handling update and render logic.
 
 ## Constructor
 
@@ -8,50 +8,50 @@ The `Sprite` class is the basic drawable entity. It wraps position, velocity, di
 const sprite = new Sprite(x, y, width, height)
 ```
 
-Creates a sprite with position `(x, y)` and size `(width, height)`.
+Creates a sprite with top-left corner at `(x, y)` and the given size. Internally, `transform` is centered at `(x + w/2, y + h/2)`.
 
-### Default Properties
+## Properties
 
-| Property | Type | Default | Description |
-|---|---|---|---|
-| `x` | `number` | — | Position X (delegates to `rect.x`) |
-| `y` | `number` | — | Position Y (delegates to `rect.y`) |
-| `width` | `number` | — | Width (delegates to `rect.w`) |
-| `height` | `number` | — | Height (delegates to `rect.h`) |
-| `rect` | `Rect` | — | The underlying AABB rectangle |
-| `position` | `Vec2` | `Vec2(x, y)` | Position vector |
-| `velocity` | `Vec2` | `Vec2(0, 0)` | Velocity vector |
-| `angle` | `number` | `0` | Rotation in radians |
-| `scale` | `Vec2` | `Vec2(1, 1)` | Scale factor |
-| `visible` | `boolean` | `true` | Whether to render |
-| `image` | `HTMLImageElement` | `null` | Optional image to draw |
-| `style` | `object` | — | `{ fill: '#ffffff', shape: 'rect' }` |
-| `groups` | `array` | `[]` | Groups this sprite belongs to |
+| Property | Type | Description |
+|----------|------|-------------|
+| `x` | `number` | Top-left X (getter/setter, converts from transform center) |
+| `y` | `number` | Top-left Y (getter/setter, converts from transform center) |
+| `width` | `number` | Width (delegates to `collider.width`) |
+| `height` | `number` | Height (delegates to `collider.height`) |
+| `transform` | `Transform` | Spatial state: `x`, `y`, `rotation`, `scale` |
+| `collider` | `Collider` | AABB collision volume: `width`, `height` |
+| `renderable` | `Renderable` | Visual state: `image`, `style` |
+| `velocity` | `Vec2` | Velocity vector (applied each frame by `MovementSystem`) |
+| `visible` | `boolean` | `true` — set to `false` to skip rendering |
+| `angle` | `number` | Rotation in radians (delegates to `transform.rotation`) |
+| `scale` | `Vec2` | Scale factor (delegates to `transform.scale`) |
+| `image` | `HTMLImageElement \| null` | Optional image (delegates to `renderable.image`) |
+| `style` | `object` | `{ fill, shape }` style config (delegates to `renderable.style`) |
+| `groups` | `Sprite[]` | Groups this sprite belongs to |
 
 ## Methods
 
 ### `update(dt)`
 
-Applies `velocity * dt` to position and syncs `position` to `rect.center`.
-
 ```js
-sprite.velocity.set(200, 0)
-sprite.update(dt)  // moves 200 px/sec right
+sprite.update(dt)
 ```
+
+Delegates to `movementSystem.updateOne(this, dt)` — applies `velocity * dt` to `transform.x` and `transform.y`.
 
 ### `render(ctx)`
 
-Renders the sprite if `visible`. Saves context, translates to center, rotates by `angle`, scales by `scale`, calls `draw(ctx)`, restores.
+```js
+sprite.render(ctx)
+```
 
-### `draw(ctx)`
-
-Internal draw method. If `image` is set, draws it centered via `drawImage`. Otherwise draws a shape using `style.fill`:
-
-- **`'rect'`** — `fillRect(-w/2, -h/2, w, h)`
-- **`'circle'`** — `arc(0, 0, min(w/2, h/2), 0, 2π)`
-- **`'ellipse'`** — `ellipse(0, 0, w/2, h/2, 0, 0, 2π)`
+Delegates to `renderSystem.renderOne(ctx, this)` — applies transform, delegates drawing to `renderable.draw()`.
 
 ### `kill()`
+
+```js
+sprite.kill()
+```
 
 Removes the sprite from all groups it belongs to and clears `this.groups`.
 
@@ -74,8 +74,8 @@ sprite.image = await ImageLoader.load('/assets/player.png')
 ```js
 const player = new Sprite(100, 200, 32, 48)
 player.style.fill = '#63B44E'
-player.velocity.set(0, 0)
-player.angle = Math.PI / 4  // 45-degree rotation
+player.velocity.set(200, 0)
+player.angle = Math.PI / 4
 
 function update(dt) {
   player.update(dt)
@@ -84,4 +84,23 @@ function update(dt) {
 function render(ctx) {
   player.render(ctx)
 }
+```
+
+## Working with Components Directly
+
+```js
+// Position — x/y getters return top-left corner
+player.x = 100
+player.y = 200
+
+// Transform center (used internally for rotation/scale)
+player.transform.x = 116   // 100 + 32/2
+player.transform.rotation = Math.PI / 2
+
+// Collider
+player.collider.width = 64
+
+// Renderable
+player.renderable.style.shape = 'ellipse'
+player.renderable.image = myImg
 ```

@@ -42,31 +42,9 @@ Collision.rectCircle(rect, { x, y, radius })  // boolean
 
 Finds the nearest point on the rect boundary to the circle center, then checks if the distance is within the circle's radius.
 
-### `groupRect(group, rect)`
-
-```js
-Collision.groupRect(group, rect)  // Sprite[]
-```
-
-Returns an array of visible sprites in the group whose rects collide with the given rect.
-
-### `groupGroup(a, b)`
-
-```js
-Collision.groupGroup(groupA, groupB)  // [spriteA, spriteB][]
-```
-
-Returns an array of all visible colliding sprite pairs between two groups. Each pair is `[spriteFromA, spriteFromB]`.
-
-```js
-const pairs = Collision.groupGroup(bullets, enemies)
-pairs.forEach(([bullet, enemy]) => {
-  bullet.kill()
-  enemy.health--
-})
-```
-
 ## Notes
 
 - All functions expect rect-like objects with `x`, `y`, `w`, `h` properties (or compatible classes like `Rect` and `Sprite`).
-- Group functions (`groupRect`, `groupGroup`) automatically skip invisible sprites.
+- For **group collision queries**, use the methods on `Group` directly (`group.collideRect()`, `group.collideGroup()`, etc.) which support spatial hashing and optional `out` parameters.
+- For **broad-phase acceleration** with large groups, enable `SpatialHash` via `group.useSpatialHash(cellSize)`.
+- For **component-level collision checks** (working with entities that have `Transform` and `Collider`), use the `Collider` static methods (`Collider.checkAABB`, `Collider.checkRect`, `Collider.containsPoint`).

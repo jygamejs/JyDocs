@@ -29,22 +29,51 @@ The loop works as follows:
 1. `requestAnimationFrame` fires — real time elapsed is measured
 2. The real delta is fed into an internal **Clock accumulator**
 3. For each accumulated fixed step, `scene.update(fixedDt)` is called
-4. After all updates, `scene.render(ctx)` draws to the canvas
-5. Input state is reset for the next frame
+4. After all updates, `scene.interpolate(alpha)` is called for smooth rendering
+5. `scene.render(ctx)` draws to the canvas
+6. Input state is reset for the next frame
 
-This ensures deterministic physics and simulation regardless of frame rate.
+The real delta is clamped to `0.2s` and a `maxTicks` limit prevents spiral-of-death if the tab was paused for a long time.
+
+## Component Architecture
+
+In v0.4.0, sprites are composed of **components** rather than being monolithic. Each component holds a focused slice of data, and **systems** operate on component pairs to process entities in batches.
+
+```
+Sprite
+├── transform: Transform    →  position (x, y), rotation, scale
+├── collider: Collider      →  width, height
+├── renderable: Renderable  →  image, style (fill, shape)
+└── velocity: Vec2          →  movement per second
+```
+
+This design makes it easy to create custom entities that work with the built-in systems:
+
+```js
+const customEntity = {
+  transform: new Transform(100, 100),
+  collider: new Collider(32, 32),
+  renderable: new Renderable(null, { fill: '#ff0', shape: 'circle' }),
+  velocity: new Vec2(100, 0),
+  visible: true,
+}
+
+movementSystem.updateOne(customEntity, dt)
+renderSystem.renderOne(ctx, customEntity)
+```
 
 ## Scenes
 
 Scenes organize your game into distinct states (menu, gameplay, pause, game over). Each scene has lifecycle hooks:
 
 | Hook | Purpose | Called When |
-|---|---|---|
+|------|---------|-------------|
 | `enter()` | Setup logic | Scene becomes active |
-| `exit()` | Teardown | Scene is exited |
+| `exit()` | Teardown | Scene is exited — auto-runs cleanups |
 | `pause()` | Pause logic | `game.pause()` is called |
 | `resume()` | Resume logic | `game.resume()` is called |
 | `update(dt)` | Simulation | Each fixed timestep tick |
+| `interpolate(alpha)` | Smooth rendering | After all updates, before render |
 | `render(ctx)` | Drawing | Each frame |
 | `renderUI()` | HTML UI | Returns HTML string for DOM overlay |
 
@@ -95,24 +124,29 @@ Call `game.refreshUI()` to re-render the UI, or `game.patchUI({ score: 'Score: 4
 
 ## Sprites
 
-`Sprite` is the basic drawable entity. It wraps a `Rect` for position/size and includes velocity, rotation, scale, and visibility.
+`Sprite` is composed of `Transform`, `Collider`, `Renderable`, and `velocity`. The `x`/`y` getters return the **top-left corner** (converting from the component's center-based coordinates).
 
 ```js
 const player = new Sprite(100, 200, 32, 48)
-player.color = '#B0DE8E'
-player.style.shape = 'rect'   // 'rect' | 'circle' | 'ellipse'
+player.style.fill = '#B0DE8E'
+player.style.shape = 'rect'
 player.velocity.set(100, 0)   // moves 100px/sec right
+
+// Equivalent component access
+player.transform.x === 116     // 100 + 32/2 (center)
+player.collider.width === 32
+player.renderable.style.fill === '#B0DE8E'
 ```
 
-Update and render manually:
+Update and render:
 
 ```js
 scene.update = function (dt) {
-  player.update(dt)  // applies velocity * dt
+  player.update(dt)  // applies velocity * dt via MovementSystem
 }
 
 scene.render = function (ctx) {
-  player.render(ctx)
+  player.render(ctx)  // renders via RenderSystem
 }
 ```
 
@@ -123,7 +157,7 @@ const sprite = new Sprite(0, 0, 64, 64)
 sprite.image = await ImageLoader.load('/assets/player.png')
 ```
 
-Properties: `x`, `y`, `width`, `height`, `angle` (radians), `scale` (Vec2), `visible`, `style.fill`, `style.shape`.
+Properties: `x`, `y`, `width`, `height`, `angle` (radians), `scale` (Vec2), `visible`, `style.fill`, `style.shape`, `transform`, `collider`, `renderable`, `velocity`.
 
 ## Groups
 
@@ -134,18 +168,33 @@ const enemies = new Group()
 enemies.add(enemy1)
 enemies.add(enemy2)
 
-// Batch update and render
+// Batch update and render (delegates to MovementSystem / RenderSystem)
 enemies.update(dt)
 enemies.render(ctx)
+
+// With viewport culling
+enemies.render(ctx, { x: camera.x, y: camera.y, w: 800, h: 600 })
 ```
+
+### Spatial Hash
+
+For large groups, enable spatial hashing to accelerate collision detection:
+
+```js
+enemies.useSpatialHash(64)  // optional, for groups with many sprites
+```
+
+When enabled, `update()` automatically rebuilds the hash, and all collision queries use it.
 
 ### Collision Queries
 
+All methods skip invisible sprites and accept an optional `out` array for pool-friendly reuse.
+
 ```js
-const hits = enemies.collideRect(player.rect)
-const overlaps = enemies.collideGroup(walls)
-const nearby = enemies.collideSprite(otherSprite)
-const points = enemies.collidePoint({ x: 100, y: 200 })
+const hits = enemies.collideRect(rect)
+const pairs = enemies.collideGroup(walls)
+const nearby = enemies.collideSprite(sprite)
+const atPoint = enemies.collidePoint({ x: 100, y: 200 })
 ```
 
 ### Array Utilities
@@ -156,9 +205,33 @@ const alive = enemies.filter(s => s.health > 0)
 const positions = enemies.map(s => ({ x: s.x, y: s.y }))
 ```
 
+## Systems
+
+### MovementSystem
+
+Applies `velocity * dt` to `transform` for all entities. Used internally by `Sprite.update()` and `Group.update()`.
+
+```js
+import { movementSystem } from 'jygame'
+
+movementSystem.updateOne(entity, dt)  // single entity
+movementSystem.update(entities, dt)   // array of entities
+```
+
+### RenderSystem
+
+Handles drawing with transform (translate/rotate/scale), Path2D caching, and viewport culling.
+
+```js
+import { renderSystem } from 'jygame'
+
+renderSystem.renderOne(ctx, entity)
+renderSystem.render(ctx, entities, viewport)
+```
+
 ## Input
 
-`Input` is a static class. Call `Input.init()` — it runs automatically when you create a `Game`.
+Input uses the **Pointer Events API** (unified mouse, touch, pen) with multi-touch support. The `Game` constructor creates an `InputContext` and sets it as the global default.
 
 ### Key Queries
 
@@ -168,10 +241,22 @@ if (Input.justPressed('SPACE')) jump()
 if (Input.justReleased('ENTER')) confirm()
 ```
 
+### Pointer API
+
+```js
+Input.x                    // latest pointer X
+Input.y                    // latest pointer Y
+Input.isPointerDown        // boolean
+Input.pointerCount         // number of active pointers
+Input.getPointer(id)       // pointer data by ID
+Input.getPointers()        // all active pointers
+Input.forEachPointer(fn)   // iterate pointers
+```
+
 ### Default Mappings
 
 | Raw Key | Alias |
-|---|---|
+|---------|-------|
 | `ArrowUp` / `w` / `W` | `UP` |
 | `ArrowDown` / `s` / `S` | `DOWN` |
 | `ArrowLeft` / `a` / `A` | `LEFT` |
@@ -189,7 +274,7 @@ Input.setKeyMap({ z: 'UP', x: 'FIRE' })
 Input.resetKeyMap()
 ```
 
-### Touch Input
+### Gestures
 
 ```js
 Input.onSwipe(direction => {
@@ -225,7 +310,10 @@ v.rotate(Math.PI / 2)     // 90° rotation
 v.dist(other)             // distance
 
 Vec2.fromAngle(Math.PI, 50)  // vector at angle with length
-Vec2.lerp(a, b, 0.5)         // midpoint
+Vec2.lerp(a, b, 0.5)         // midpoint (allocates)
+Vec2.lerpInto(out, a, b, 0.5) // midpoint (pool-friendly)
+
+v.setFrom(other)           // copy without allocation
 ```
 
 ### Rect
@@ -241,6 +329,13 @@ r.collides(other)               // AABB overlap test
 r.overlap(other)                // returns overlapping Rect or null
 r.clamp(boundary)               // keep inside boundary
 r.inset(5)                      // shrink by 5px on all sides
+
+// Pool-friendly anchor getters
+const out = { x: 0, y: 0 }
+r.getCenter(out)
+
+// Or allocate on each call
+r.getCenter()
 ```
 
 ## Collision
@@ -253,9 +348,9 @@ Collision.circleCircle(a, b)
 Collision.circleCircle({ x: 0, y: 0, radius: 30 }, { x: 40, y: 0, radius: 20 })
 Collision.pointInRect(point, rect)
 Collision.rectCircle(rect, circle)
-Collision.groupRect(group, rect)
-Collision.groupGroup(groupA, groupB)
 ```
+
+For group collision queries, use the methods directly on `Group`. For component-level AABB checks, use `Collider.checkAABB`, `Collider.checkRect`, or `Collider.containsPoint`.
 
 ## Time
 
@@ -264,7 +359,7 @@ Collision.groupGroup(groupA, groupB)
 Used internally by `Game` but can be used standalone:
 
 ```js
-const clock = new Clock(60)
+const clock = new Clock(60, 5)  // fps, maxTicks
 
 function loop(time) {
   const realDt = (time - lastTime) / 1000
@@ -274,6 +369,9 @@ function loop(time) {
   for (let i = 0; i < steps; i++) {
     update(clock.fixedDt)
   }
+
+  // clock.alpha for interpolation
+  render(clock.alpha)
 
   requestAnimationFrame(loop)
 }
@@ -336,14 +434,18 @@ Storage.clear()
 // Single image
 const img = await ImageLoader.load('/assets/player.png')
 
-// Batch load
-const assets = await ImageLoader.loadAll({
+// Batch load with progress tracking
+const task = ImageLoader.loadAll({
   player: '/assets/player.png',
   enemy: '/assets/enemy.png',
 })
+task.onProgress((loaded, total) => console.log(`${loaded}/${total}`))
+const assets = await task
 
 ImageLoader.get('player')   // retrieves cached image
 ImageLoader.has('player')   // true/false
+ImageLoader.unload('player') // remove from cache
+ImageLoader.clear()          // empty entire cache
 ```
 
 ### FontLoader
@@ -351,12 +453,15 @@ ImageLoader.has('player')   // true/false
 ```js
 await FontLoader.load('PixelFont', '/fonts/pixel.woff2')
 
-// Batch load
-await FontLoader.loadAll({
+// Batch load with progress tracking
+const task = FontLoader.loadAll({
   PixelFont: '/fonts/pixel.woff2',
 })
+await task
 
 FontLoader.isLoaded('PixelFont')
+FontLoader.unload('PixelFont')
+FontLoader.clear()
 ```
 
 ## Color System
@@ -366,13 +471,34 @@ Jygame includes 458 named colors organized by family:
 ```js
 import { Color, Colors } from 'jygame'
 
-Color.SuperSilver              // "#eeeeee"
-Color.CyberYellow              // "#ffd400"
-Color.MagicalMalachite         // "#00c68d"
+Color.SuperSilver              // '#eeeeee'
+Color.CyberYellow              // '#ffd400'
+Color.MagicalMalachite         // '#00c68d'
 
-Colors.Green                   // "#d6fb61"
+Colors.Green                   // '#d6fb61'
 Colors.GreenShades.UltraMoss   // specific green shade
 Colors.BlueShades.FrostedBlueberries
 ```
 
 Each family (`Red`, `Orange`, `Yellow`, `Green`, `Teal`, `Blue`, `Purple`, `Pink`, `Brown`, `Grey`, `Black`, `White`) has a `Shades` sub-object with named variants.
+
+## Object Pooling
+
+The `Pool` class reduces garbage collection pressure by reusing frequently created objects:
+
+```js
+const bulletPool = new Pool({
+  create: () => new Sprite(0, 0, 8, 8),
+  reset: (b) => { b.visible = false; b.velocity.set(0, 0) },
+  initialSize: 50,
+})
+
+function fire() {
+  const b = bulletPool.acquire()
+  // configure and use
+}
+
+function destroy(b) {
+  bulletPool.release(b)
+}
+```
