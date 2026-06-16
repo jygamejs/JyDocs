@@ -49,6 +49,22 @@ const game = new Game({
 game.run(scene)
 ```
 
+## Particle System
+
+Jygame includes a full particle system with `ParticleSystem`, `ParticleEmitter`, and a modifier pipeline (`FadeModifier`, `ScaleModifier`, `ColorModifier`, `VelocityModifier`, `AnimatedSpriteModifier`).
+
+```js
+import { ParticleSystem, ParticleEmitter, FadeModifier } from 'jygame'
+```
+
+## Audio System
+
+Jygame provides a comprehensive audio system with `AudioManager`, spatial audio, effect chains, music with fade/crossfade, and snapshot-based scene transitions. Supports both `HtmlAudioBackend` and `WebAudioBackend`.
+
+```js
+import { AudioManager, WebAudioBackend } from 'jygame'
+```
+
 ## Project Structure
 
 ```

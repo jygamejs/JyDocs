@@ -19,7 +19,7 @@ export default defineConfig({
       { text: 'API Reference', link: '/api/game' },
       { text: 'Examples', link: '/examples/' },
       {
-        text: 'v0.5.0',
+        text: 'v0.7.1',
         items: [
           { text: 'GitHub', link: 'https://github.com/Bouzidi-Youssef/Jygame' },
           { text: 'npm', link: 'https://www.npmjs.com/package/jygame' },
@@ -121,6 +121,23 @@ export default defineConfig({
           items: [
             { text: 'Pool', link: '/api/pool' },
             { text: 'ActivePool', link: '/api/active-pool' },
+          ],
+        },
+        {
+          text: 'Particle System',
+          items: [
+            { text: 'Particle System', link: '/api/particle-system' },
+            { text: 'Particle Modifiers', link: '/api/particle-modifiers' },
+          ],
+        },
+        {
+          text: 'Audio',
+          items: [
+            { text: 'Audio Manager', link: '/api/audio-manager' },
+            { text: 'Audio Playback', link: '/api/audio-playback' },
+            { text: 'Audio Definitions', link: '/api/audio-definition' },
+            { text: 'Audio Scene', link: '/api/audio-scene' },
+            { text: 'Audio Effects', link: '/api/audio-effects' },
           ],
         },
         {
