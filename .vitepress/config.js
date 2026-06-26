@@ -7,11 +7,11 @@ export default defineConfig({
   appearance: 'force-dark',
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/g2.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo_old.svg' }],
   ],
 
   themeConfig: {
-    logo: '/g2.svg',
+    logo: '/logo.avif',
 
     nav: [
       { text: 'Home', link: '/' },
