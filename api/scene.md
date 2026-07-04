@@ -1,8 +1,8 @@
 # Scene
 
-The `Scene` class organizes your game into distinct states with lifecycle hooks. Scenes are **single-use** — once exited, they must not be re-entered or re-mounted. Create a new scene instance instead.
+The `Scene` class organizes your game into distinct states with lifecycle hooks. It extends the ECS `Scene` base class and owns a `World` for all entities and systems.
 
-Scenes live on a **stack** managed by `Game`. By default, a scene **blocks updates** from scenes below it but does **not block rendering**.
+Scenes are **single-use** — once exited, they must not be re-entered. Create a new scene instance instead.
 
 ## Constructor
 
@@ -10,14 +10,27 @@ Scenes live on a **stack** managed by `Game`. By default, a scene **blocks updat
 const scene = new Scene()
 ```
 
-Creates `scene.root` — a `<div>` element used as the DOM UI overlay container. Sets `blocksUpdateBelow = true` and `blocksRenderBelow = false`.
+Creates `scene.root` — a `<div>` element for DOM UI overlays. Sets `blocksUpdateBelow = true` and `blocksRenderBelow = false`.
+
+The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.createDefault()`, giving each scene a pre-configured World with all built-in components, systems, and resources.
 
 ## Properties
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `blocksUpdateBelow` | `boolean` | `true` | When on top, pause `update()` on scenes below |
-| `blocksRenderBelow` | `boolean` | `false` | When on top, skip `render()` on scenes below |
+| `scene.world` | `World` | | The scene's ECS World (lazily created) |
+| `scene.blocksUpdateBelow` | `boolean` | `true` | Pause `update()` on scenes below |
+| `scene.blocksRenderBelow` | `boolean` | `false` | Skip `render()` on scenes below |
+
+The scene's `world` is lazily initialized on first access. During `enter()`, the engine Scene:
+1. Sets `world` resources: `CanvasContext` (canvas 2D context), `Camera` (viewport)
+2. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
+
+On `exit()`:
+1. Runs all cleanup functions (event listeners, etc.)
+2. Restores `Sprite._defaultWorld`
+3. Clears systems and resources
+4. Destroys the World
 
 ## Lifecycle Hooks
 
@@ -25,11 +38,11 @@ All hooks are no-ops by default. Scenes throw if `enter()` or `exit()` is called
 
 | Hook | Signature | Called When |
 |------|-----------|-------------|
-| `enter()` | `enter()` | Scene becomes active — throws if called twice |
-| `exit()` | `exit()` | Scene is exited — runs all cleanup functions, throws if called twice |
+| `enter()` | `enter()` | Scene becomes active |
+| `exit()` | `exit()` | Scene is exited — runs all cleanup functions |
 | `pause()` | `pause()` | Scene is paused by a scene pushed on top |
 | `resume()` | `resume()` | Scene is resumed after the scene above is popped |
-| `update(dt)` | `update(dt)` | Each fixed timestep tick |
+| `update(dt)` | `update(dt)` | Each fixed timestep tick — `world.update(dt)` is called by the engine |
 | `interpolate(alpha)` | `interpolate(alpha)` | After all fixed updates, before render |
 | `render(ctx)` | `render(ctx)` | Each frame — receives the canvas 2D context |
 | `renderUI()` | `renderUI()` | Returns an HTML string for the DOM overlay |
@@ -37,17 +50,23 @@ All hooks are no-ops by default. Scenes throw if `enter()` or `exit()` is called
 ```js
 const scene = new Scene()
 
-scene.enter = () => {
-  this.player = new Sprite(100, 100, 32, 32)
+scene.enter = function () {
+  const world = this.world
+  this.player = world.createEntity()
+  world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
+  world.set(this.player, Transform, { x: 400, y: 300 })
+  world.set(this.player, Renderable, { fillColor: 0x63B44EFF })
 }
 
-scene.update = (dt) => {
-  movementSystem.updateOne(this.player, dt)
+scene.update = function (dt) {
+  const vel = this.world.get(this.player, Velocity)
+  if (Input.isDown('RIGHT')) vel.x = 200
+  else if (Input.isDown('LEFT')) vel.x = -200
+  else vel.x = 0
 }
 
-scene.render = (ctx) => {
+scene.render = function (ctx) {
   ctx.clearRect(0, 0, 800, 600)
-  renderSystem.renderOne(ctx, this.player)
 }
 ```
 
@@ -62,7 +81,6 @@ scene.render = (ctx) => {
 | `transitionTo(scene)` | Alias for `switchScene(scene)` |
 
 ```js
-// Inside a scene method:
 this.pushScene(new PauseScene())
 this.popScene()
 this.replaceScene(new GameOverScene())
@@ -71,10 +89,9 @@ this.switchScene(new MenuScene())
 
 ## Blocking
 
-When `blocksUpdateBelow = true` (default), scenes below are paused via `pause()` / `resume()`. When `blocksRenderBelow = false` (default), all visible scenes render in order from bottom to top.
+When `blocksUpdateBelow = true` (default), scenes below are paused via `pause()`/`resume()`. When `blocksRenderBelow = false` (default), all visible scenes render in order bottom to top.
 
 ```js
-// A pause overlay that blocks input but lets the game render underneath
 class PauseScene extends Scene {
   constructor() {
     super()
@@ -89,7 +106,7 @@ class PauseScene extends Scene {
 
 ## DOM UI
 
-The scene's `root` div is appended to the game's DOM overlay when active. `renderUI()` populates it.
+The scene's `root` div is appended to the game's DOM overlay when active.
 
 ```js
 scene.renderUI = function () {
@@ -99,26 +116,15 @@ scene.renderUI = function () {
 
 ## Event Listener Cleanup
 
-Methods that auto-clean on `exit()`:
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `on(target, event, handler)` | `on(el, 'click', fn)` | Registers a DOM listener, pushes cleanup |
-| `onSwipe(cb)` | `onSwipe(dir => ...)` | Wraps `Input.onSwipe` with auto-cleanup |
-| `onTap(cb)` | `onTap(({x, y}) => ...)` | Wraps `Input.onTap` with auto-cleanup |
-| `cleanup(fn)` | `cleanup(() => ...)` | Manually push a function to `_cleanups` |
+| Method | Description |
+|--------|-------------|
+| `on(target, event, handler)` | DOM listener, auto-cleaned on exit |
+| `onSwipe(cb)` | `Input.onSwipe` with auto-cleanup |
+| `onTap(cb)` | `Input.onTap` with auto-cleanup |
+| `cleanup(fn)` | Manually push to cleanup stack |
 
 ```js
 scene.enter = function () {
   this.on(document, 'keydown', this.handleKey)
 }
-```
-
-## Single-Use Enforcement
-
-```js
-game.run(scene)
-// later:
-game.run(scene)  // ❌ Error: scene already mounted
-game.switchScene(scene)  // ❌ Error: scene already exited
 ```

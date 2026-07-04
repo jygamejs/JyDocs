@@ -2,27 +2,137 @@
 
 ## Architecture
 
-Jygame uses a pure **Entity-Component-System (ECS)** model. Entities (like `Sprite`) are data containers composed of components. Dedicated **systems** read and write component data — entities have no behavior of their own.
+Jygame uses a pure **archetype-based Entity-Component-System (ECS)** model.
+
+- **Entities** are packed 32-bit integer IDs (`(generation << 24) | slot`)
+- **Components** are classes with typed schemas (e.g., `Transform { x: f32, y: f32 }`)
+- **Systems** extend `System` with static `query` and `priority`
+- **World** is the central orchestrator — owns entities, components, tables, queries, systems, and resources
+
+Entities are grouped into **archetypes** — unique sets of component IDs. Each archetype has a dense table of typed arrays (one column per component field). When you add or remove a component, the entity moves to a different archetype.
 
 ```
-Sprite (data entity)
-├── transform: Transform    →  position (x, y), rotation, scale
-├── collider: Collider      →  width, height
-├── renderable: Renderable  →  image, style
-├── animation: Animation    →  clips, current frame, playing state
-└── velocity: Vec2          →  movement per second
+Archetype [Transform, Velocity]
+┌─────────┬──────────┬──────────┐
+│ entity  │ Transform│ Velocity │
+│ (Uint32)│ x,y,...  │ x,y      │
+├─────────┼──────────┼──────────┤
+│   1     │ 100,200  │ 0,0      │
+│   2     │ 300,400  │ -5,10    │
+└─────────┴──────────┴──────────┘
 ```
 
-Systems that process entities:
+## World
 
-| System | Operates On | Responsibility |
-|--------|-------------|----------------|
-| `MovementSystem` | entities with `velocity` + `transform` | Applies velocity * dt to position |
-| `AnimationSystem` | entities with `animation` + `renderable` | Advances frames, writes `renderable.image` |
-| `RenderSystem` | entities with `renderable` + `transform` + `collider` | Applies camera, culls, draws to canvas |
-| `CollisionSystem` | entities with `collider` + `transform` + `visible` | Spatial hash management, collision queries |
+The `World` is the central hub. Each engine `Scene` creates its own World via `DefaultWorldBuilder.createDefault()`.
 
-Any object with the right component shape works with these systems — no base class required.
+```js
+import { DefaultWorldBuilder } from 'jygame'
+
+const world = DefaultWorldBuilder.createDefault()
+world.update(dt) // runs all systems in priority order
+```
+
+## Entities
+
+```js
+const entity = world.createEntity()
+world.destroyEntity(entity)
+world.isAlive(entity) // boolean
+```
+
+## Components
+
+Components are classes with a static typed schema:
+
+```js
+import { Transform, Velocity } from 'jygame'
+
+world.addComponent(entity, Transform)
+world.setComponent(entity, Transform, { x: 100, y: 200 })
+world.getComponent(entity, Transform) // live view with getters/setters
+world.hasComponent(entity, Velocity)  // boolean
+world.removeComponent(entity, Velocity)
+```
+
+Shorter aliases:
+
+```js
+world.add(entity, Transform)
+world.set(entity, Transform, { x: 100 })
+world.get(entity, Transform)
+world.has(entity, Velocity)
+world.remove(entity, Velocity)
+```
+
+### Batch Operations
+
+```js
+world.addMany(entity, Transform, Velocity, Renderable)
+world.removeMany(entity, Velocity)
+world.clear(entity)   // remove all components
+world.clone(entity)   // deep copy
+```
+
+### Builder Pattern
+
+```js
+const entity = world
+  .entity()
+  .with(Transform, { x: 100, y: 200 })
+  .with(Velocity)
+  .with(Renderable, { fillColor: 0xFF0000FF })
+  .create()
+```
+
+## Systems
+
+Systems extend `System` with a static `query` and `priority`:
+
+```js
+import { System } from 'jygame'
+
+class GravitySystem extends System {
+  static query = { all: [Transform, Velocity] }
+  static priority = 0
+
+  update(ctx, dt) {
+    const vy = ctx.column(Velocity, 'y')
+    for (let r = 0; r < ctx.entityCount; r++) {
+      vy[r] += 500 * dt // gravity
+    }
+  }
+}
+```
+
+Built-in systems with their priorities:
+
+| System | Priority | Query | Description |
+|--------|----------|-------|-------------|
+| `MovementSystem` | 0 | `[Transform, Velocity]` | `pos += vel * dt` |
+| `AnimationSystem` | 1 | `[Animation, Renderable]` | Frame advancement |
+| `CollisionSystem` | 2 | `[Transform, Collider, Visible]` | Spatial hash rebuild |
+| `RenderSystem` | 3 | `[Transform, Renderable, RenderBounds, Visible]` | Batched canvas draw |
+| `TrailSystem` | 4 | `[Transform, Trail, Visible]` | Trail rendering |
+
+## Queries
+
+```js
+const enemies = world.query({ all: [Transform, EnemyTag] })
+const moving = world.query({ all: [Transform, Velocity], none: [StaticTag] })
+
+for (const entity of enemies.entities()) { ... }
+for (const table of moving.tables()) { ... }
+```
+
+## Resources
+
+Share singletons across systems:
+
+```js
+world.setResource(Camera, new Camera(0, 0, 800, 600))
+world.getResource(Camera)
+```
 
 ## Game Loop
 
@@ -36,6 +146,7 @@ const game = new Game({ width: 800, height: 600, fps: 60 })
 const scene = new Scene()
 scene.update = function (dt) {
   // dt is always 1/60 — deterministic updates
+  // world.update(dt) is called automatically by engine Scene
 }
 scene.render = function (ctx) {
   // Draw everything here
@@ -47,14 +158,14 @@ game.run(scene)
 The loop:
 1. `requestAnimationFrame` fires — real time is measured
 2. Real delta is fed into an internal `Clock` accumulator
-3. For each accumulated fixed step, `scene.update(fixedDt)` is called
+3. For each accumulated fixed step, `scene.update(fixedDt)` is called (which calls `world.update(dt)`)
 4. After all updates, `scene.interpolate(alpha)` for smooth rendering
 5. `scene.render(ctx)` draws to the canvas
 6. Input state is reset
 
 ## Scenes & Scene Stack
 
-Scenes organize your game into distinct states (menu, gameplay, pause, game over). They live on a **stack** managed by `Game`.
+Scenes organize your game into distinct states. They live on a **stack** managed by `Game`.
 
 ### Lifecycle Hooks
 
@@ -74,16 +185,9 @@ Scenes organize your game into distinct states (menu, gameplay, pause, game over
 Scenes are **single-use** — create a new instance each time.
 
 ```js
-// Push a pause overlay on top
 this.pushScene(new PauseScene())
-
-// Pop back to the previous scene
 this.popScene()
-
-// Replace the current scene
 this.replaceScene(new GameOverScene())
-
-// Reset the entire stack
 this.switchScene(new MenuScene())
 ```
 
@@ -93,19 +197,7 @@ By default:
 - `blocksUpdateBelow = true` — scenes below are paused
 - `blocksRenderBelow = false` — all scenes render (bottom to top)
 
-```js
-class PauseScene extends Scene {
-  constructor() {
-    super()
-    this.blocksUpdateBelow = true
-    this.blocksRenderBelow = false  // game renders underneath
-  }
-}
-```
-
 ### Event Cleanup
-
-Use `this.on()` for auto-cleaned event listeners:
 
 ```js
 this.on(document, 'click', onClick)
@@ -121,191 +213,72 @@ scene.renderUI = function () {
 }
 ```
 
-Use `game.refreshUI()` or `game.patchUI({ score: 'Score: 42' })`.
+## Sprite (Convenience Wrapper)
 
-## Sprites
-
-Sprites are data entities — they have **no `update` or `render` methods**. Systems handle all behavior.
+`Sprite` wraps an ECS entity for convenience. It creates the entity in a `World` and provides getter/setter access to its components:
 
 ```js
+import { Sprite } from 'jygame'
+
 const player = new Sprite(100, 200, 32, 48)
 player.style.fill = '#B0DE8E'
-player.velocity.set(200, 0)
 
-// Each frame:
-movementSystem.updateOne(player, dt)
-renderSystem.renderOne(ctx, player)
+// Under the hood:
+player.world      // the World
+player.entity     // the entity ID
+player.transform  // live Transform view
+player.velocity   // live Velocity view
+player.collider   // live Collider view
 ```
 
-Properties: `x`, `y`, `width`, `height`, `angle`, `scale`, `visible`, `style`, `image`, `transform`, `collider`, `renderable`, `animation`, `velocity`.
+Sprites are processed by the same ECS systems — no manual system calls needed when using the engine Scene.
 
-## Groups
+## Group
 
-`Group` is a pure iterable container — no `update` or `render`. Use `for...of` with systems.
+`Group` is an iterable container for sprites. It can be **query-backed** (read-only, populated by a `QueryView`) or **sprite-backed** (manually managed):
 
 ```js
+// Sprite-backed
 const enemies = new Group()
 enemies.add(enemy1)
 enemies.add(enemy2)
 
-for (const sprite of enemies) {
-  movementSystem.updateOne(sprite, dt)
-  renderSystem.renderOne(ctx, sprite)
-}
-```
-
-### Spatial Hash
-
-```js
-enemies.useSpatialHash(64)
-```
-
-### Collision Queries
-
-```js
-const hits = enemies.collideRect(rect)
-enemies.collideGroup(walls, (a, b) => a.kill())  // callback zero-alloc
-enemies.collideSprite(player).forEach(s => s.kill())
+// Query-backed (read-only, auto-populated by query)
+const allEnemies = Group.query(world, { all: [Transform, EnemyTag] })
 ```
 
 ## Camera
 
-The `Camera` defines the visible world region. The first camera created becomes `Camera.main` automatically — used by `RenderSystem`.
+The `Camera` defines the visible world region. The engine Scene sets one up automatically as a resource.
 
 ```js
-import { Camera, renderSystem } from 'jygame'
+import { Camera } from 'jygame'
 
 const camera = new Camera(400, 300, 800, 600)
 camera.zoom = 2
-
-// Track a player
 camera.follow(player)
 
-// Screen/world coordinate conversion
+// Coordinate conversion
 const world = {}
 camera.screenToWorld(mouseX, mouseY, world)
-
-// RenderSystem uses Camera.main automatically
-renderSystem.render(ctx, allEntities)
-```
-
-## Animation
-
-Add named animation clips to any entity with an `animation` component.
-
-```js
-const player = new Sprite(100, 100, 32, 48)
-player.animation.add('walk', {
-  frames: [walk1, walk2, walk3, walk4],
-  fps: 8,
-  loop: true,
-})
-player.animation.add('idle', {
-  frames: [idleFrame],
-  fps: 1,
-  loop: true,
-})
-
-player.animation.play('idle')
-
-// Each frame
-animationSystem.updateOne(player, dt)
-// player.renderable.image is updated automatically
-```
-
-## Systems
-
-### MovementSystem
-
-```js
-movementSystem.updateOne(entity, dt)
-movementSystem.update(entities, dt)
-```
-
-### AnimationSystem
-
-```js
-animationSystem.updateOne(entity, dt)
-animationSystem.update(entities, dt)
-```
-
-### RenderSystem
-
-Accepts a `Camera` (falls back to `Camera.main`):
-
-```js
-renderSystem.render(ctx, entities, camera)
-renderSystem.renderOne(ctx, entity, camera)
-```
-
-### CollisionSystem
-
-Centralized collision with spatial hash management:
-
-```js
-collisionSystem.useSpatialHash(myGroup, myGroup)
-collisionSystem.beginFrame()
-collisionSystem.collideRect(entities, rect)
-collisionSystem.collideGroup(a, b, (x, y) => { /* callback */ })
 ```
 
 ## Input
 
-### Action Bindings
-
-Bind multiple keys to a logical action:
-
 ```js
 Input.bind('JUMP', 'SPACE')
 Input.bind('JUMP', 'W')
-Input.bind('JUMP', 'UP')
 
-// Check the action, not the raw key
-if (Input.justPressed('JUMP')) player.jump()
-```
+Input.isDown('RIGHT')
+Input.justPressed('SPACE')
+Input.justReleased('ENTER')
 
-### Key Queries
-
-```js
-Input.isDown('RIGHT')       // held this frame
-Input.justPressed('SPACE')  // pressed this frame
-Input.justReleased('ENTER') // released this frame
-```
-
-### Pointer
-
-```js
-Input.x, Input.y            // latest pointer position
-Input.isPointerDown         // boolean
-Input.pointerCount          // multi-touch
-Input.getPointers()         // iterator over active pointers
-```
-
-### Gestures
-
-```js
-Input.onSwipe(dir => { /* UP/DOWN/LEFT/RIGHT */ })
-Input.onTap(({ x, y }) => { /* client coords */ })
+Input.x, Input.y
+Input.onSwipe(dir => {})
+Input.onTap(({ x, y }) => {})
 ```
 
 ## Object Pooling
-
-### Pool
-
-Simple object reuse with optional warmup:
-
-```js
-const bulletPool = new Pool({
-  create: () => new Sprite(0, 0, 8, 8),
-  initialSize: 50,
-})
-const b = bulletPool.acquire()
-bulletPool.release(b)
-```
-
-### ActivePool
-
-Advanced pool with active tracking, batch ops, and iteration:
 
 ```js
 const pool = new ActivePool({
@@ -313,61 +286,52 @@ const pool = new ActivePool({
   initialSize: 50,
 })
 
-pool.acquireMany(10, null, (b, i) => { b.x = i * 20 })
-
-// Iterate only active objects
-pool.forEachActive(b => renderSystem.renderOne(ctx, b))
-pool.updateActive(b => { b.update(dt); if (done(b)) pool.release(b) })
-pool.clearActive()
+const b = pool.acquire()
+pool.release(b)
+pool.forEachActive(sprite => { ... })
 ```
 
-## Math Utilities
-
-### Vec2
+## Prefabs
 
 ```js
-const v = new Vec2(3, 4)
-v.add(new Vec2(1, 2)).scale(2)
-v.magnitude()        // ≈ 14.42
-v.normalize()
-v.rotate(Math.PI / 2)
-v.setFrom(other)     // no-alloc copy
+const bulletPrefab = world.createPrefab('bullet')
+  .add(Transform, { scaleX: 0.5, scaleY: 0.5 })
+  .add(Velocity)
+  .add(Renderable, { fillColor: 0xFFFF00FF })
+  .tag(ProjectileTag)
 
-Vec2.fromAngle(Math.PI, 50)
-Vec2.lerpInto(out, a, b, 0.5)  // pool-friendly
+const bullet = world.instantiate('bullet', {
+  Transform: { x: playerX, y: playerY },
+  Velocity: { x: aimX * 500, y: aimY * 500 },
+})
 ```
 
-### Rect
+## Events
 
 ```js
-const r = new Rect(10, 20, 100, 80)
-r.collides(other)
-r.contains({ x: 50, y: 50 })
-r.getCenter(out)    // pool-friendly
+class CollisionEvent { static fields = ['entityA', 'entityB'] }
+world.registerEvent(CollisionEvent)
+
+world.events.emit(CollisionEvent, { entityA: e1, entityB: e2 })
+for (const evt of world.events.read(CollisionEvent)) { ... }
+```
+
+## Hierarchy
+
+```js
+world.initHierarchy()
+world.attach(child, parent)
+world.detach(child)
+world.parentOf(entity)
+world.childrenOf(entity)
 ```
 
 ## Asset Loading
 
-### ImageLoader
-
 ```js
 const task = ImageLoader.loadAll({ player: 'player.png', enemy: 'enemy.png' })
-task.onProgress((loaded, total) => console.log(`${loaded}/${total}`))
+task.onProgress((l, t) => console.log(`${l}/${t}`))
 const assets = await task
-```
-
-### FontLoader
-
-```js
-const task = FontLoader.loadAll({ Pixel: '/fonts/pixel.woff2' })
-await task
-```
-
-### LoadingTask
-
-```js
-task.onProgress((loaded, total) => { /* progress bar */ })
-const result = await task
 ```
 
 ## Color System
@@ -375,7 +339,9 @@ const result = await task
 458 named colors organized by family:
 
 ```js
-Color.CyberYellow         // '#ffd400'
-Colors.Green              // '#d6fb61'
+import { Color, Colors } from 'jygame'
+
+Color.CyberYellow
+Colors.Green.Mint
 Colors.BlueShades.FrostedBlueberries
 ```

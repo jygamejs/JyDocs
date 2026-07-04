@@ -8,11 +8,9 @@ my-game/
 ├── src/
 │   ├── main.js              # Entry point — creates Game, runs initial scene
 │   ├── scenes/              # One file per scene
-│   │   ├── MenuScene.js
-│   │   ├── GameScene.js
-│   │   └── PauseScene.js
-│   ├── entities/            # Sprite factories or custom entity definitions
-│   ├── systems/             # Game logic separated from scenes
+│   ├── entities/            # Prefab definitions, entity factories
+│   ├── systems/             # Custom ECS systems
+│   ├── components/          # Custom component definitions
 │   └── assets/
 ├── package.json
 └── vite.config.js
@@ -27,12 +25,8 @@ Keep scenes focused. If a scene exceeds 200 lines, extract logic into separate f
 Create a new scene instance each time you enter a state. Never re-use an exited scene.
 
 ```js
-// ✅ Correct
-game.switchScene(new MenuScene())
-
-// ❌ Error: scene already exited
-game.switchScene(menuScene)
-game.switchScene(menuScene)
+game.switchScene(new MenuScene())  // ✅
+game.switchScene(menuScene)         // ❌ already exited
 ```
 
 ### Setup in `enter()`, Teardown in `exit()`
@@ -40,7 +34,9 @@ game.switchScene(menuScene)
 ```js
 class GameScene extends Scene {
   enter() {
-    this.player = new Sprite(100, 100, 32, 32)
+    const world = this.world
+    this.player = world.createEntity()
+    world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
     this.on(Input, 'keydown', this.handleInput)
   }
 }
@@ -60,91 +56,138 @@ class GameScene extends Scene {
 }
 ```
 
-### Blocking Behaviour
+## ECS Best Practices
+
+### Entities Are Data, Not Objects
+
+Entities are integer IDs. Component data lives in typed arrays, not JavaScript objects. Access component data through the World:
 
 ```js
-// Pause overlay — blocks updates below but renders on top
-class PauseScene extends Scene {
-  constructor() {
-    super()
-    this.blocksUpdateBelow = true
-    this.blocksRenderBelow = false
+// ✅ ECS way
+const vel = world.get(entity, Velocity)
+vel.x = 200
+
+// ❌ Avoid storing component objects
+entity.velocity = { x: 200, y: 0 }
+```
+
+### Use Queries Instead of Manual Collections
+
+```js
+// ✅ Let the ECS find matching entities
+const enemies = world.query({ all: [Transform, EnemyTag] })
+
+// ❌ Manual list
+const enemiesList = []
+```
+
+### Keep Systems Focused
+
+Each system should do one thing well:
+
+```js
+class GravitySystem extends System {
+  static query = { all: [Velocity] }
+  static priority = 0
+
+  update(ctx, dt) {
+    const vy = ctx.column(Velocity, 'y')
+    for (let r = 0; r < ctx.entityCount; r++) {
+      vy[r] += 500 * dt
+    }
+  }
+}
+
+class LifetimeSystem extends System {
+  static query = { all: [Lifetime] }
+  static priority = 10
+
+  update(ctx, dt) {
+    const remaining = ctx.column(Lifetime, 'remaining')
+    for (let r = 0; r < ctx.entityCount; r++) {
+      remaining[r] -= dt
+      if (remaining[r] <= 0) {
+        ctx.world.destroyEntity(ctx.entities()[r])
+      }
+    }
   }
 }
 ```
 
-## Sprites & ECS
+### Priority Ordering
 
-### Sprites Are Data, Not Objects
+Use `static priority` to control execution order. Lower values run first:
 
-Sprites no longer have `update()` or `render()` — use systems:
+| Priority | Typical System |
+|----------|----------------|
+| -10 | `HierarchySystem` (world transform computation) |
+| 0 | Input processing, velocity updates |
+| 1 | Animation |
+| 2 | Collision detection |
+| 3 | Rendering |
+| 10 | Cleanup, lifetime management |
+
+### Use Tags for Entity Roles
 
 ```js
-// ❌ Old pattern (v0.4.0)
-sprite.update(dt)
-sprite.render(ctx)
+class BossTag {}
+class InvulnerableTag {}
 
-// ✅ v0.5.0
-movementSystem.updateOne(sprite, dt)
-renderSystem.renderOne(ctx, sprite)
-animationSystem.updateOne(sprite, dt)
+world.add(entity, BossTag)
+world.add(entity, InvulnerableTag)
+
+const bosses = world.query({ all: [Transform, BossTag], none: [InvulnerableTag] })
 ```
 
-### Build Custom Entities
-
-Any object with the right components works with built-in systems:
+### Prefabs for Reusable Entity Templates
 
 ```js
-const particle = {
-  transform: new Transform(x, y),
-  collider: new Collider(4, 4),
-  renderable: new Renderable(null, { fill: '#ff0', shape: 'circle' }),
-  velocity: new Vec2(0, -100),
-  visible: true,
-}
+world.createPrefab('bullet')
+  .add(Transform, { scaleX: 0.5, scaleY: 0.5 })
+  .add(Velocity)
+  .add(Renderable, { fillColor: 0xFFFF00FF })
+  .add(Collider, { width: 8, height: 8 })
+  .add(RenderBounds, { width: 8, height: 8 })
+  .tag(ProjectileTag)
 
-movementSystem.updateOne(particle, dt)
-renderSystem.renderOne(ctx, particle)
-```
-
-### Use `ActivePool` for Frequent Spawning
-
-```js
-const bulletPool = new ActivePool({
-  create: () => new Sprite(0, 0, 4, 4),
-  reset: (b) => { b.visible = false; b.velocity.set(0, 0) },
-  initialSize: 50,
+const bullet = world.instantiate('bullet', {
+  Transform: { x: playerX, y: playerY },
 })
+```
 
-function update(dt) {
-  bulletPool.updateActive(b => {
-    movementSystem.updateOne(b, dt)
-    if (outOfBounds(b)) bulletPool.release(b)
-  })
-}
+## Sprite Usage
 
-function render(ctx) {
-  bulletPool.forEachActive(b => renderSystem.renderOne(ctx, b))
-}
+```js
+// Sprites wrap ECS entities — use the underlying world for bulk operations
+const player = new Sprite(100, 100, 32, 32)
+player.velocity.x = 200
+```
+
+### Use `destroy()` When Done
+
+```js
+player.destroy() // kills entity + cleans up groups
+// Don't use the sprite after destroy
 ```
 
 ## Groups
 
-### Groups Are Containers Only
-
-Groups no longer have `update` or `render` — iterate manually:
+### Group Types
 
 ```js
-// ✅ v0.5.0
-for (const sprite of group) {
-  movementSystem.updateOne(sprite, dt)
-}
+// Sprite-backed (mutable)
+const items = new Group()
+items.add(potion)
+
+// Query-backed (read-only, auto-populated)
+const enemies = Group.query(world, { all: [Transform, EnemyTag] })
 ```
 
-### Use `dispose()` for Cleanup
+### Query-Backed Groups Are Read-Only
 
 ```js
-group.dispose()  // unregisters from CollisionSystem + clears
+const enemies = Group.query(world, { all: [Transform, EnemyTag] })
+enemies.add(new Sprite()) // ❌ throws — read-only
 ```
 
 ### Enable Spatial Hash for Large Groups
@@ -153,106 +196,21 @@ group.dispose()  // unregisters from CollisionSystem + clears
 group.useSpatialHash(64)
 ```
 
-### Prefer Callback Style for Group Collisions
+### Prefer Callback Collision
 
 ```js
-// Zero-alloc — no array created
+// Zero-alloc
 bullets.collideGroup(enemies, (bullet, enemy) => {
-  bullet.kill()
+  bullet.destroy()
   enemy.health--
 })
-
-// Array style — allocates
-const pairs = bullets.collideGroup(enemies)
 ```
 
 ## Camera
 
-### Set Up a Camera Early
-
 ```js
-const camera = new Camera(400, 300, 800, 600)  // becomes Camera.main
-```
-
-### Follow the Player
-
-```js
-scene.update = function (dt) {
-  camera.follow(player)
-}
-```
-
-### Convert Coordinates
-
-```js
-const worldPos = {}
-camera.screenToWorld(mouseX, mouseY, worldPos)
-```
-
-## Animation
-
-### Define Clips with Arrays of Preloaded Images
-
-```js
-const frames = await Promise.all([
-  ImageLoader.load('walk1.png'),
-  ImageLoader.load('walk2.png'),
-  ImageLoader.load('walk3.png'),
-  ImageLoader.load('walk4.png'),
-])
-
-player.animation.add('walk', { frames, fps: 8, loop: true })
-```
-
-### Advance Animation in Update
-
-```js
-scene.update = function (dt) {
-  animationSystem.updateOne(player, dt)
-}
-```
-
-## Input
-
-### Use Action Bindings Over Raw Keys
-
-```js
-// ✅ Good
-Input.bind('JUMP', 'SPACE')
-Input.bind('JUMP', 'W')
-if (Input.justPressed('JUMP')) jump()
-
-// ❌ Avoid
-if (Input.justPressed('SPACE') || Input.justPressed('W')) jump()
-```
-
-### Action Bindings Replace Manual Remapping for Common Cases
-
-For simple multi-key actions, `bind()` is more ergonomic than `mapKey()`:
-
-```js
-Input.bind('FIRE', 'z')
-Input.bind('FIRE', 'x')
-Input.bind('FIRE', 'ENTER')
-```
-
-## Collision
-
-### Centralize with CollisionSystem
-
-`CollisionSystem` manages all collision state and spatial hashes. Use it directly for custom entity arrays:
-
-```js
-collisionSystem.useSpatialHash(myEntities, myEntities)
-collisionSystem.beginFrame()  // rebuild all hashes
-collisionSystem.collideRect(myEntities, rect)
-```
-
-### Group Methods Delegate Automatically
-
-```js
-group.useSpatialHash(64)  // registers with collisionSystem
-group.collideRect(rect)   // delegates to collisionSystem
+const camera = new Camera(400, 300, 800, 600)
+camera.follow(player)
 ```
 
 ## Game Loop
@@ -262,48 +220,25 @@ group.collideRect(rect)   // delegates to collisionSystem
 ```js
 // ❌ Bad
 render(ctx) {
-  player.velocity.x = 5     // frame-rate dependent!
-  player.render(ctx)
+  world.get(entity, Velocity).x = 5  // frame-rate dependent!
 }
 
 // ✅ Good
 update(dt) {
-  player.velocity.x = 200
-  movementSystem.updateOne(player, dt)
-}
-render(ctx) {
-  renderSystem.renderOne(ctx, player)
-}
-```
-
-### Scene Operations Are Safe During Update
-
-Scene mutations called inside `update()` are deferred and applied after the update cycle:
-
-```js
-scene.update = function (dt) {
-  if (Input.justPressed('ESCAPE')) {
-    this.pushScene(new PauseScene())  // queued, not applied immediately
-  }
+  // world.update(dt) is called automatically by engine Scene
 }
 ```
 
 ## State
 
-### Keep UI State Separate from Game State
-
 ```js
 const gameState = new State({ score: 0, lives: 3 })
-this.selectedOption = 0     // scene-local UI state
-
 gameState.subscribe(s => {
   game.patchUI({ score: `Score: ${s.score}` })
 })
 ```
 
 ## Asset Loading
-
-### Preload and Use Progress
 
 ```js
 class BootScene extends Scene {
@@ -321,26 +256,36 @@ class BootScene extends Scene {
 
 ## Performance
 
-### Use `ActivePool` for All Hot Objects
-
-Prefer `ActivePool` over raw `Pool` for frequently created/destroyed objects — it tracks active objects so you never iterate inactive ones.
-
-### Use Callback-Style Collision to Avoid Allocations
+### Use Bulk Column Access in Systems
 
 ```js
-group.collideGroup(other, (a, b) => { ... })  // no array allocated
+// ✅ Fast — direct typed array access
+update(ctx, dt) {
+  const x = ctx.column(Transform, 'x')
+  const y = ctx.column(Transform, 'y')
+  const vx = ctx.column(Velocity, 'x')
+  const vy = ctx.column(Velocity, 'y')
+  for (let r = 0; r < ctx.entityCount; r++) {
+    x[r] += vx[r] * dt
+    y[r] += vy[r] * dt
+  }
+}
 ```
 
-### Enable Spatial Hash for Groups > 50 Entities
-
-### Use Pool-Friendly Methods
+### Use `ActivePool` for Hot Objects
 
 ```js
-Vec2.lerpInto(out, a, b, t)     // no allocation
-rect.getCenter(out)             // no allocation
-group.collideRect(rect, out)    // reuse output array
+const bulletPool = new ActivePool({
+  create: () => new Sprite(0, 0, 4, 4),
+  initialSize: 100,
+})
 ```
 
-### Set Up Camera for Viewport Culling
+### Spatial Hash for Groups > 50
 
-Camera-based rendering automatically culls off-screen entities.
+### Pool-Friendly Methods
+
+```js
+Vec2.lerpInto(out, a, b, t)
+rect.getCenter(out)
+```

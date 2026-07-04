@@ -14,55 +14,58 @@ import { Game } from 'https://unpkg.com/jygame@latest/jygame.js'
 
 ## Your First Game
 
+Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query.
+
 ```js
-import { Game, Scene, Sprite, Input, movementSystem, renderSystem } from 'jygame'
+import { Game, Scene, Input, DefaultWorldBuilder } from 'jygame'
+import { Transform, Velocity, Renderable, Visible, Collider, RenderBounds } from 'jygame'
+import { MovementSystem, RenderSystem } from 'jygame'
 
 const scene = new Scene()
 
 scene.enter = function () {
-  this.player = new Sprite(100, 100, 32, 32)
-  this.player.style.fill = '#63B44E'
+  const world = this.world // each Scene has its own World
+
+  const player = world.createEntity()
+  world.addMany(player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
+  world.set(player, Transform, { x: 400, y: 300, scaleX: 1, scaleY: 1 })
+  world.set(player, Collider, { width: 32, height: 32 })
+  world.set(player, RenderBounds, { width: 32, height: 32 })
+  world.set(player, Renderable, { fillColor: 0x63B44EFF, shape: 0 })
+  world.set(player, Visible, { value: 1 })
+
+  this.player = player
 }
 
 scene.update = function (dt) {
-  if (Input.isDown('RIGHT')) this.player.velocity.x = 200
-  else if (Input.isDown('LEFT')) this.player.velocity.x = -200
-  else this.player.velocity.x = 0
+  const world = this.world
+  const vel = world.get(this.player, Velocity)
 
-  if (Input.isDown('UP')) this.player.velocity.y = -200
-  else if (Input.isDown('DOWN')) this.player.velocity.y = 200
-  else this.player.velocity.y = 0
+  if (Input.isDown('RIGHT')) vel.x = 200
+  else if (Input.isDown('LEFT')) vel.x = -200
+  else vel.x = 0
 
-  movementSystem.updateOne(this.player, dt)
+  if (Input.isDown('UP')) vel.y = -200
+  else if (Input.isDown('DOWN')) vel.y = 200
+  else vel.y = 0
 }
 
-scene.render = function (ctx) {
-  ctx.clearRect(0, 0, 800, 600)
-  renderSystem.renderOne(ctx, this.player)
-}
-
-const game = new Game({
-  width: 800,
-  height: 600,
-})
-
+const game = new Game({ width: 800, height: 600 })
 game.run(scene)
 ```
 
-## Particle System
+No manual system calls — the `DefaultWorldBuilder` registers `MovementSystem` and `RenderSystem` automatically. Just call `world.update(dt)` inside the scene's update, which is handled by the engine `Scene`.
 
-Jygame includes a full particle system with `ParticleSystem`, `ParticleEmitter`, and a modifier pipeline (`FadeModifier`, `ScaleModifier`, `ColorModifier`, `VelocityModifier`, `AnimatedSpriteModifier`).
+## Particles
 
 ```js
-import { ParticleSystem, ParticleEmitter, FadeModifier } from 'jygame'
+import { ParticleSystem, ParticleEmitter, FadeModifier, ScaleModifier } from 'jygame'
 ```
 
-## Audio System
-
-Jygame provides a comprehensive audio system with `AudioManager`, spatial audio, effect chains, music with fade/crossfade, and snapshot-based scene transitions. Supports both `HtmlAudioBackend` and `WebAudioBackend`.
+## Audio
 
 ```js
-import { AudioManager, WebAudioBackend } from 'jygame'
+import { AudioManager, WebAudioBackend, LowPassEffect } from 'jygame'
 ```
 
 ## Project Structure
@@ -74,6 +77,7 @@ my-game/
 └── src/
     ├── main.js         # Entry point
     ├── scenes/         # Scene files
-    ├── entities/       # Game entities
+    ├── entities/       # Entity factories / prefabs
+    ├── systems/        # Custom ECS systems
     └── assets/         # Images, fonts
 ```
