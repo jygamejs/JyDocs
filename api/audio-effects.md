@@ -209,7 +209,7 @@ const chain = new EffectChain()
 chain.add(new DelayEffect({ time: 0.5, feedback: 0.4, wet: 0.3 }))
 chain.add(new LowPassEffect({ frequency: 3000 }))
 
-// Live effect updates
-const reverb = new ReverbEffect({ decay: 2 })
-reverb.update({ decay: 3 })
+// Live effect updates (not supported by ReverbEffect — recreate instead)
+const filter = new LowPassEffect({ frequency: 5000 })
+filter.update({ frequency: 2000, Q: 2 })
 ```

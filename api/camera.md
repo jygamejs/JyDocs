@@ -57,7 +57,7 @@ Sets `camera.x` and `camera.y` to `entity.transform.x` and `entity.transform.y`.
 camera.worldToScreen(worldX, worldY, out)  // returns out
 ```
 
-Converts world coordinates to screen pixel coordinates. Writes result into `out` (`{ x, y }`).
+Converts world coordinates to screen pixel coordinates. Writes result into `out` (`{ x, y }`). **`out` is required** — the method does not allocate a new object.
 
 ### `screenToWorld(sx, sy, out)`
 
@@ -65,7 +65,7 @@ Converts world coordinates to screen pixel coordinates. Writes result into `out`
 camera.screenToWorld(screenX, screenY, out)  // returns out
 ```
 
-Converts screen pixel coordinates to world coordinates. Writes result into `out` (`{ x, y }`).
+Converts screen pixel coordinates to world coordinates. Writes result into `out` (`{ x, y }`). **`out` is required** — the method does not allocate a new object.
 
 ## Usage
 

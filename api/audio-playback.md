@@ -128,7 +128,7 @@ Typically created via `AudioManager.music(key)`.
 | `isPaused` | `boolean` | Whether paused (read-only) |
 | `currentTime` | `number` | Current playback position (seconds) |
 | `duration` | `number` | Total duration (read-only) |
-| `effects` | `EffectChain` | Optional per-track effect chain |
+| `effects` | `EffectChain \| null` | Optional per-track effect chain (`null` if not configured) |
 
 ### Methods
 
