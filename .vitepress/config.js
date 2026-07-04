@@ -19,7 +19,7 @@ export default defineConfig({
       { text: 'API Reference', link: '/api/game' },
       { text: 'Examples', link: '/examples/' },
       {
-        text: 'v0.7.1',
+        text: 'v0.8.0',
         items: [
           { text: 'GitHub', link: 'https://github.com/Bouzidi-Youssef/Jygame' },
           { text: 'npm', link: 'https://www.npmjs.com/package/jygame' },
@@ -41,12 +41,29 @@ export default defineConfig({
 
       '/api/': [
         {
-          text: 'Core',
+          text: 'Engine',
           items: [
             { text: 'Game', link: '/api/game' },
             { text: 'Scene', link: '/api/scene' },
             { text: 'Camera', link: '/api/camera' },
             { text: 'LoadingTask', link: '/api/loading-task' },
+          ],
+        },
+        {
+          text: 'ECS Core',
+          items: [
+            { text: 'World', link: '/api/ecs/world' },
+            { text: 'Entity Lifecycle', link: '/api/ecs/entity' },
+            { text: 'Component Schemas', link: '/api/ecs/component-schemas' },
+            { text: 'Tag Components', link: '/api/ecs/tag-components' },
+            { text: 'Systems', link: '/api/ecs/systems' },
+            { text: 'Queries', link: '/api/ecs/queries' },
+            { text: 'Events', link: '/api/ecs/events' },
+            { text: 'Prefabs', link: '/api/ecs/prefabs' },
+            { text: 'Serialization', link: '/api/ecs/serialization' },
+            { text: 'Streaming', link: '/api/ecs/streaming' },
+            { text: 'Hierarchy', link: '/api/ecs/hierarchy' },
+            { text: 'DefaultWorldBuilder', link: '/api/ecs/default-world-builder' },
           ],
         },
         {
@@ -56,6 +73,8 @@ export default defineConfig({
             { text: 'Collider', link: '/api/collider' },
             { text: 'Renderable', link: '/api/renderable' },
             { text: 'Animation', link: '/api/animation' },
+            { text: 'Trail', link: '/api/trail' },
+            { text: 'WorldTransform', link: '/api/world-transform' },
           ],
         },
         {
@@ -65,6 +84,8 @@ export default defineConfig({
             { text: 'AnimationSystem', link: '/api/animation-system' },
             { text: 'RenderSystem', link: '/api/render-system' },
             { text: 'CollisionSystem', link: '/api/collision-system' },
+            { text: 'TrailSystem', link: '/api/trail-system' },
+            { text: 'HierarchySystem', link: '/api/hierarchy-system' },
           ],
         },
         {
@@ -72,6 +93,7 @@ export default defineConfig({
           items: [
             { text: 'Particle System', link: '/api/particle-system' },
             { text: 'Particle Modifiers', link: '/api/particle-modifiers' },
+            { text: 'Emitter Shapes', link: '/api/emitter-shapes' },
           ],
         },
         {
@@ -105,7 +127,6 @@ export default defineConfig({
         {
           text: 'Collision',
           items: [
-            { text: 'CollisionSystem', link: '/api/collision-system' },
             { text: 'SpatialHash', link: '/api/spatial-hash' },
           ],
         },
