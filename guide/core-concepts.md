@@ -249,7 +249,7 @@ const allEnemies = Group.query(world, { all: [Transform, EnemyTag] })
 
 ## Camera
 
-The `Camera` defines the visible world region. The engine Scene sets one up automatically as a resource.
+The `Camera` defines the visible world region. The engine Scene sets one up automatically as a resource and wires it into the InputSystem's `CoordinateSystem` on `enter()`.
 
 ```js
 import { Camera } from 'jygame'
@@ -258,14 +258,189 @@ const camera = new Camera(400, 300, 800, 600)
 camera.zoom = 2
 camera.follow(player)
 
-// Coordinate conversion
-const world = {}
-camera.screenToWorld(mouseX, mouseY, world)
+// Coordinate conversion (non-allocating, requires out param)
+const out = {}
+camera.screenToWorld(mouseX, mouseY, out)
+camera.worldToScreen(worldX, worldY, out)
+
+// Allocating convenience wrappers
+const screenPt = camera.project(worldX, worldY)   // → { x, y }
+const worldPt  = camera.unproject(screenX, screenY) // → { x, y }
 ```
 
-## Input
+The `CoordinateSystem` uses the scene's camera for the VIEWPORT ↔ WORLD transform. Input coordinates can be converted via:
 
-The `Input` global facade provides access to keyboard, pointer, and gesture input. It delegates to the game's default `InputContext` instance.
+```js
+const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
+```
+
+## Input (Legacy Facade)
+
+The `Input` global facade provides access to keyboard, pointer, and gesture input. It delegates to the game's default `InputContext` instance. This API is still available but superseded by the Input System below.
+
+## Input System (v0.8.1+)
+
+The `InputSystem` is an event-driven, device-oriented input architecture introduced in v0.8.1. It replaces the legacy `Input` facade with a layered pipeline:
+
+```
+DOM Events → Backend → InputEventQueue → Devices → ContextStack → Action States
+```
+
+### Setup
+
+`InputSystem` is created automatically by `Game` and accessible via `game.inputSystem`:
+
+```js
+const system = game.inputSystem;
+// system.backend      → BrowserBackend
+// system.devices      → DeviceRegistry
+// system.contextStack → ContextStack
+// system.coordinateSystem → CoordinateSystem
+```
+
+### Devices
+
+Devices consume events from the shared queue and expose typed state:
+
+| Device | Purpose |
+|--------|---------|
+| `Keyboard` | Key state queries (`isDown`, `justPressed`, `justReleased`, `modifiers`) |
+| `Mouse` | Button state, position, wheel, double-click |
+| `PointerManager` | Multi-touch pointer tracking with pressure, tilt, twist, velocity |
+| `GestureEngine` | Gesture recognition (tap, swipe, pinch, rotate, etc.) |
+| `TextInput` | IME composition and printable character input |
+
+```js
+const kb = game.inputSystem.devices.get(Keyboard);
+if (kb.justPressed(KeyCode.SPACE)) player.jump();
+```
+
+### Action System
+
+Abstract game actions (e.g., "move", "jump") are mapped to bindings via `ActionMap`:
+
+```js
+this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
+  { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
+  { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },
+]));
+```
+
+Action states provide `pressed`, `justPressed`, `justReleased`, `strength`, and `vector`:
+
+```js
+const move = this._actionMap.getState("move");
+player.vel.x = move.vector.x * speed;
+```
+
+### Context Stack
+
+Input contexts are evaluated by priority. Higher-priority contexts can block lower ones:
+
+```js
+// Pause menu blocks gameplay input
+stack.push(new InputContext("pause", pauseMap, { priority: 100, consumePolicy: "block" }));
+```
+
+The engine `Scene` automatically creates an `InputContext`, pushes it on `enter()`, and pops it on `exit()`. Bind actions in `onCreate()` or `enter()` using `this._actionMap`.
+
+### Gestures
+
+Gesture recognition is integrated into the device system:
+
+```js
+const ge = game.inputSystem.devices.get(GestureEngine);
+if (ge.last(GestureType.SWIPE)) { /* handle swipe */ }
+```
+
+Or via `GestureBinding` within the action system:
+
+```js
+this._actionMap.bind("pinch", new GestureBinding(GestureType.PINCH));
+```
+
+### Coordinate System
+
+The `CoordinateSystem` transforms between four spaces:
+
+| Space | Description |
+|-------|-------------|
+| `Space.SCREEN` | Raw DOM client coordinates |
+| `Space.VIEWPORT` | Logical canvas pixels (minus offset ÷ DPR) |
+| `Space.WORLD` | Game world coordinates (camera-projected) |
+| `Space.UI` | Overlay coordinates (identity with viewport) |
+
+```js
+const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: 100, y: 200 });
+```
+
+The camera is wired automatically in `Scene.enter()`.
+
+### See Also
+
+- [InputSystem](/api/input/input-system) — full API reference
+- [Devices](/api/input/devices) — all device types
+- [Actions](/api/input/actions) — action maps, bindings, contexts
+- [Gestures](/api/input/gestures) — gesture recognition
+- [Coordinate System](/api/input/coordinate-system) — space transforms
+
+## Debug & Diagnostics (v0.8.2+)
+
+JyGame ships with a built-in debugging and diagnostics suite providing real-time performance metrics, an in-game overlay HUD, and a standalone workspace window.
+
+### Enabling
+
+Debug is enabled by default (`debug: true` in `Game` constructor). The diagnostics engine records timers, counters, and gauges each frame.
+
+### In-Game Overlay
+
+Press the backtick (`` ` ``) key to toggle the overlay HUD with 7 views:
+
+| Key | View | Description |
+|-----|------|-------------|
+| `` ` `` | Toggle overlay | Show/Hide the HUD |
+| `1`–`6` | Individual views | Performance, Frame Graph, Timeline, Metrics, Events, Captures |
+| `Ctrl+I` | Manual capture | Save the last N frames for analysis |
+
+```js
+game.debug.show();   // programmatic toggle
+game.debug.hide();
+game.debug.toggle();
+```
+
+### Debug Workspace
+
+Press `Ctrl+F3` to open a standalone workspace window that receives real-time ECS world snapshots via `BroadcastChannel`.
+
+### Custom Metrics
+
+```js
+const mids = resolveMetricIds(diag, {
+  aiThink: { name: "game.ai.think", type: MetricType.TIMER, category: MetricCategory.USER },
+});
+diag.scope(mids.aiThink, () => { /* expensive logic */ });
+```
+
+### Triggers & Captures
+
+```js
+diag.addTrigger({
+  name: "Slow Frame",
+  metricName: "frame.total",
+  operator: ">",
+  threshold: 16.67,
+  preFrames: 10,
+  postFrames: 5,
+});
+```
+
+### See Also
+
+- [Getting Started](/api/debug/getting-started) — quick start guide
+- [Diagnostics Engine](/api/debug/diagnostics) — metrics, triggers, captures
+- [In-Game Overlay](/api/debug/overlay) — overlay views and shortcuts
+- [Debug Workspace](/api/debug/workspace) — standalone workspace
+- [World Snapshots](/api/debug/snapshots) — ECS snapshot system
 
 ### Key Concepts
 

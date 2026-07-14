@@ -2,6 +2,10 @@
 
 An async progress tracker returned by `ImageLoader.loadAll()` and `FontLoader.loadAll()`. Provides progress callbacks and acts as a thenable (compatible with `await`).
 
+::: info Source moved (v0.8.2)
+`LoadingTask` moved from `core/LoadingTask.js` to `loaders/LoadingTask.js`. The import path `import { LoadingTask } from "jygame"` continues to work via the barrel export.
+:::
+
 ## Constructor
 
 ```js

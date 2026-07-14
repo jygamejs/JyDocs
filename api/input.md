@@ -1,8 +1,14 @@
-# Input
+# Input (Legacy)
+
+<Badge type="warning">Legacy — superseded by InputSystem in v0.8.1</Badge>
 
 The `Input` object is a **global facade** that delegates to the game's default `InputContext` instance. It mirrors every method of `InputContext` for convenience.
 
 The `Game` constructor automatically creates its own `InputContext`, binds it to the game container, and sets it as the default.
+
+::: tip Use the new InputSystem
+The legacy `Input` facade still works for quick prototyping, but new projects should use the [InputSystem](/api/input/input-system) with its device registry, action maps, context stack, gesture recognition, and coordinate transforms.
+:::
 
 ## Pointer Position
 

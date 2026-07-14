@@ -21,16 +21,22 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | `scene.world` | `World` | | The scene's ECS World (lazily created) |
 | `scene.blocksUpdateBelow` | `boolean` | `true` | Pause `update()` on scenes below |
 | `scene.blocksRenderBelow` | `boolean` | `false` | Skip `render()` on scenes below |
+| `scene._actionMap` | `ActionMap` | (internal) | Scene-specific action bindings for the new InputSystem (v0.8.1+) |
+| `scene._inputPriority` | `number` | `0` | Input context priority for this scene |
+| `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `enter()`, popped on `exit()` |
 
 The scene's `world` is lazily initialized on first access. During `enter()`, the engine Scene:
 1. Sets `world` resources: `CanvasContext` (canvas 2D context), `Camera` (viewport)
 2. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
+3. Creates an `InputContext` for the scene, registers it with `game.inputSystem.contextStack`
+4. Wires the scene's camera into `game.inputSystem.coordinateSystem.camera`
 
 On `exit()`:
-1. Runs all cleanup functions (event listeners, etc.)
-2. Restores `Sprite._defaultWorld`
-3. Clears systems and resources
-4. Destroys the World
+1. Pops the scene's `InputContext` from the context stack
+2. Runs all cleanup functions (event listeners, etc.)
+3. Restores `Sprite._defaultWorld`
+4. Clears systems and resources
+5. Destroys the World
 
 ## Lifecycle Hooks
 
@@ -48,6 +54,8 @@ All hooks are no-ops by default. Scenes throw if `enter()` or `exit()` is called
 | `renderUI()` | `renderUI()` | Returns an HTML string for the DOM overlay |
 
 ```js
+import { KeyBinding, ChordBinding, CompositeBinding, ActionKind, KeyCode } from "jygame";
+
 const scene = new Scene()
 
 scene.enter = function () {
@@ -56,13 +64,23 @@ scene.enter = function () {
   world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
   world.set(this.player, Transform, { x: 400, y: 300 })
   world.set(this.player, Renderable, { fillColor: 0x63B44EFF })
+
+  // Bind actions using the new InputSystem (v0.8.1+)
+  this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
+    { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
+    { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },
+    { vector: [0, -1], binding: new KeyBinding(KeyCode.KEY_W) },
+    { vector: [0, 1],  binding: new KeyBinding(KeyCode.KEY_S) },
+  ]));
+  this._actionMap.bind("jump", new KeyBinding(KeyCode.SPACE));
 }
 
 scene.update = function (dt) {
-  const vel = this.world.get(this.player, Velocity)
-  if (Input.isDown('RIGHT')) vel.x = 200
-  else if (Input.isDown('LEFT')) vel.x = -200
-  else vel.x = 0
+  const move = this._actionMap.getState("move");
+  const jump = this._actionMap.getState("jump");
+  const vel = this.world.get(this.player, Velocity);
+  vel.x = move.vector.x * 200;
+  if (jump.justPressed) vel.y = -300;
 }
 
 scene.render = function (ctx) {

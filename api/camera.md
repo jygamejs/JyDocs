@@ -67,6 +67,22 @@ camera.screenToWorld(screenX, screenY, out)  // returns out
 
 Converts screen pixel coordinates to world coordinates. Writes result into `out` (`{ x, y }`). **`out` is required** — the method does not allocate a new object.
 
+### `project(x, y)`
+
+```js
+const screenPt = camera.project(worldX, worldY)  // { x, y }
+```
+
+Allocating convenience wrapper around `worldToScreen()`. Returns a new `{ x, y }` object.
+
+### `unproject(x, y)`
+
+```js
+const worldPt = camera.unproject(screenX, screenY)  // { x, y }
+```
+
+Allocating convenience wrapper around `screenToWorld()`. Returns a new `{ x, y }` object.
+
 ## Usage
 
 ```js

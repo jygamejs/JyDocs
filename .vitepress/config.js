@@ -19,7 +19,7 @@ export default defineConfig({
       { text: 'API Reference', link: '/api/game' },
       { text: 'Examples', link: '/examples/' },
       {
-        text: 'v0.8.0',
+        text: 'v0.8.4',
         items: [
           { text: 'GitHub', link: 'https://github.com/Bouzidi-Youssef/Jygame' },
           { text: 'npm', link: 'https://www.npmjs.com/package/jygame' },
@@ -111,7 +111,18 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Input',
+          text: 'Input System',
+          items: [
+            { text: 'InputSystem Overview', link: '/api/input/input-system' },
+            { text: 'Input Devices', link: '/api/input/devices' },
+            { text: 'Action System', link: '/api/input/actions' },
+            { text: 'Gesture Recognition', link: '/api/input/gestures' },
+            { text: 'Coordinate System', link: '/api/input/coordinate-system' },
+            { text: 'Input Events & Backends', link: '/api/input/events' },
+          ],
+        },
+        {
+          text: 'Input (Legacy)',
           items: [
             { text: 'Input', link: '/api/input' },
             { text: 'InputContext', link: '/api/input-context' },
@@ -166,6 +177,16 @@ export default defineConfig({
           text: 'Color',
           items: [
             { text: 'Color / Colors', link: '/api/colors' },
+          ],
+        },
+        {
+          text: 'Debug / Diagnostics',
+          items: [
+            { text: 'Getting Started', link: '/api/debug/getting-started' },
+            { text: 'Diagnostics Engine', link: '/api/debug/diagnostics' },
+            { text: 'In-Game Overlay', link: '/api/debug/overlay' },
+            { text: 'Debug Workspace', link: '/api/debug/workspace' },
+            { text: 'World Snapshots', link: '/api/debug/snapshots' },
           ],
         },
       ],

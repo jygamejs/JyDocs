@@ -14,12 +14,12 @@ import { Game } from 'https://unpkg.com/jygame@latest/jygame.js'
 
 ## Your First Game
 
-Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query.
+Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query. The [new InputSystem](/api/input/input-system) (v0.8.1+) provides device-oriented input with action maps and context stacks.
 
 ```js
-import { Game, Scene, Input, DefaultWorldBuilder } from 'jygame'
+import { Game, Scene } from 'jygame'
 import { Transform, Velocity, Renderable, Visible, Collider, RenderBounds } from 'jygame'
-import { MovementSystem, RenderSystem } from 'jygame'
+import { KeyBinding, CompositeBinding, ActionKind, KeyCode } from 'jygame'
 
 const scene = new Scene()
 
@@ -34,25 +34,29 @@ scene.enter = function () {
   world.set(player, Renderable, { fillColor: 0x63B44EFF, shape: 0 })
   world.set(player, Visible, { value: 1 })
 
+  // Bind WASD movement using the new InputSystem
+  this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
+    { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
+    { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },
+    { vector: [0, -1], binding: new KeyBinding(KeyCode.KEY_W) },
+    { vector: [0, 1],  binding: new KeyBinding(KeyCode.KEY_S) },
+  ]));
+
   this.player = player
 }
 
 scene.update = function (dt) {
-  const world = this.world
-  const vel = world.get(this.player, Velocity)
-
-  if (Input.isDown('RIGHT')) vel.x = 200
-  else if (Input.isDown('LEFT')) vel.x = -200
-  else vel.x = 0
-
-  if (Input.isDown('UP')) vel.y = -200
-  else if (Input.isDown('DOWN')) vel.y = 200
-  else vel.y = 0
+  const move = this._actionMap.getState("move");
+  const vel = this.world.get(this.player, Velocity);
+  vel.x = move.vector.x * 200;
+  vel.y = move.vector.y * 200;
 }
 
-const game = new Game({ width: 800, height: 600 })
+const game = new Game({ width: 800, height: 600, debug: true })
 game.run(scene)
 ```
+
+Press the backtick (`` ` ``) key to open the in-game debug overlay — it shows FPS, frame timing, and lets you browse metrics.
 
 No manual system calls — the `DefaultWorldBuilder` registers `MovementSystem` and `RenderSystem` automatically. Just call `world.update(dt)` inside the scene's update, which is handled by the engine `Scene`.
 

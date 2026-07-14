@@ -17,6 +17,7 @@ const game = new Game(options)
 | `height` | `number` | `600` | Logical canvas height (game pixels) |
 | `fps` | `number` | `60` | Fixed timestep target |
 | `maxTicks` | `number` | `5` | Maximum fixed ticks per frame (spiral-of-death protection) |
+| `debug` | `boolean` | `true` | Enable the diagnostics engine, in-game overlay (`\``), and workspace (`Ctrl+F3`) |
 | `autoPause` | `boolean` | `true` | Auto-pause when the browser tab is hidden |
 | `scaleToFit` | `boolean \| object` | `null` | Viewport scaling config |
 
@@ -31,7 +32,9 @@ const game = new Game(options)
 | `scene` | `Scene \| null` | Current top scene (getter — returns `peekScene()`) |
 | `sceneCount` | `number` | Number of scenes on the stack (getter) |
 | `clock` | `Clock` | Internal fixed-timestep clock |
-| `input` | `InputContext` | The game's input context instance |
+| `input` | `InputContext` | The game's legacy input context instance |
+| `inputSystem` | `InputSystem` | The new input system (v0.8.1+), with device registry, context stack, and coordinate transforms |
+| `debug` | `OverlayHost` | The debug overlay host (lazily created, v0.8.2+) — use `.show()`, `.hide()`, `.toggle()` |
 | `fps` | `number` | Smoothed real-time FPS (read-only) |
 | `isPaused` | `boolean` | Whether the game is paused (getter) |
 
@@ -109,7 +112,9 @@ Toggles between paused and resumed states.
 
 ### `destroy()`
 
-Stops the game loop, disconnects observers, removes visibility/resize listeners, exits all scenes on the stack, and destroys the input context.
+Stops the game loop, disconnects observers, removes visibility/resize listeners, exits all scenes on the stack, destroys the input system and input context.
+
+> **Focus handling:** When the window regains focus, the keyboard state is reset to prevent stuck keys.
 
 ## UI / DOM Methods
 
