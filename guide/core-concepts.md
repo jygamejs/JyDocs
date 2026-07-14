@@ -432,49 +432,6 @@ diag.addTrigger({
 - [Debug Workspace](/api/debug/workspace) — standalone workspace
 - [World Snapshots](/api/debug/snapshots) — ECS snapshot system
 
-### Key Concepts
-
-**Key aliases** map multiple raw keys to a logical name. The built-in defaults are directional (`UP`, `DOWN`, `LEFT`, `RIGHT`), `SPACE`, `ESCAPE`, and `ENTER`. You can add your own via `Input.mapKey()` or `Input.bind()` for action-based queries.
-
-**Three-state queries** distinguish between held, just-pressed, and just-released — essential for responsive controls:
-
-| Query | When it returns true |
-|-------|---------------------|
-| `isDown(key)` | Every frame the key/action is held |
-| `justPressed(key)` | Only the first frame after press |
-| `justReleased(key)` | Only the first frame after release |
-
-**Action bindings** let you decouple key mappings from gameplay logic. Multiple keys can trigger the same action:
-
-```js
-Input.bind('JUMP', 'SPACE')
-Input.bind('JUMP', 'W')
-Input.bind('JUMP', 'UP')
-
-if (Input.justPressed('JUMP')) player.jump()
-```
-
-**Gesture detection** — `onSwipe()` and `onTap()` handle touch and mouse gestures without manual pointer tracking.
-
-```js
-Input.onSwipe(dir => player.move(dir))
-
-Input.onTap(({ x, y }) => {
-  const worldPos = {}
-  camera.screenToWorld(x, y, worldPos)
-  bulletPool.acquire().position.set(worldPos.x, worldPos.y)
-})
-```
-
-**Pointer state** — `Input.x`/`Input.y` give the latest pointer coordinates in canvas-space, and `Input.isPointerDown` checks for active press. Multi-touch is supported via `Input.getPointer(id)` / `Input.getPointers()`.
-
-```js
-const dx = Input.x - lastX
-const dy = Input.y - lastY
-camera.x -= dx / camera.zoom
-camera.y -= dy / camera.zoom
-```
-
 ## Object Pooling
 
 Object pooling reuses short-lived objects to avoid garbage collection pressure. JyGame provides two pool types:
