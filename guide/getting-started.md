@@ -218,17 +218,17 @@ class ExplosionEffect {
 Play sound effects and music with the audio manager:
 
 ```js
-import { AudioManager } from 'jygame'
+import { AudioManager, AudioLoader } from "jygame";
 
 const audio = new AudioManager();
+audio.define("jump", { source: "sounds/jump.wav" });
+audio.define("bg", { source: "sounds/bg.ogg" });
 
-// Load and play a sound
-await audio.load('jump', 'sounds/jump.wav');
-audio.play('jump');
+await AudioLoader.load("sounds/jump.wav");
+await AudioLoader.load("sounds/bg.ogg");
 
-// Background music with loop
-await audio.load('music', 'sounds/bg.ogg');
-audio.play('music', { loop: true, volume: 0.5 });
+audio.play("jump");
+audio.play("bg", { loop: true, volume: 0.5 });
 ```
 
 ## Assets
