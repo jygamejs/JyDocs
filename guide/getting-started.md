@@ -215,20 +215,26 @@ class ExplosionEffect {
 
 ## Audio
 
-Play sound effects and music with the audio manager:
+Play sound effects and music with the audio manager. Define each sound with `audio.define()`, load the file with `AudioLoader`, then play it. For looping music, use `define()` with `group: "music"` and `loop: true`, then get a `Music` reference with `audio.music()`:
 
 ```js
 import { AudioManager, AudioLoader } from "jygame";
 
 const audio = new AudioManager();
 audio.define("jump", { source: "sounds/jump.wav" });
-audio.define("bg", { source: "sounds/bg.ogg" });
+audio.define("bgm", { source: "sounds/bg.ogg", group: "music", loop: true });
 
 await AudioLoader.load("sounds/jump.wav");
 await AudioLoader.load("sounds/bg.ogg");
 
-audio.play("jump");
-audio.play("bg", { loop: true, volume: 0.5 });
+const music = audio.music("bgm");
+music.volume = 0.5;
+music.play();
+music.fadeIn(2);
+
+audio.play("jump"); // SFX
+
+// Call audio.update(dt) each frame to advance music fade/transitions
 ```
 
 ## Assets
