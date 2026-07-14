@@ -69,7 +69,7 @@ The particle system uses a **backend architecture** — a `ParticleSystem` manag
 A continuous fire effect using a cone-shaped emitter. Always specify a backend and storage capacity for performance:
 
 ```js
-import { ParticleSystem, ParticleEmitter, ConeShape } from "jygame";
+import { Game, Scene, ParticleSystem, ParticleEmitter, ConeShape } from "jygame";
 import { GpuParticleBackend } from "jygame/particles/backends/GpuParticleBackend.js";
 import { SoAParticleStorage } from "jygame/particles/storage/SoAParticleStorage.js";
 import { CanvasParticleRenderer } from "jygame/particles/renderers/CanvasParticleRenderer.js";
@@ -107,6 +107,7 @@ class FireScene extends Scene {
       }),
       initializer: (p) => {
         p.maxLife = 1 + Math.random() * 1.5;
+        p.life = p.maxLife;
         p.size = 4 + Math.random() * 6;
       },
     });
@@ -125,6 +126,9 @@ class FireScene extends Scene {
     this.ps.render(ctx);
   }
 }
+
+const game = new Game({ parent: document.body, width: 800, height: 600 });
+game.run(new FireScene());
 ```
 
 ### One-Shot Explosion
@@ -133,7 +137,7 @@ Use `rate: 0` and `burst()` for instant effects:
 
 ```js
 import { ParticleSystem, ParticleEmitter, CircleShape } from "jygame";
-import { GpuParticleBackend } from "jygame/particles/backends/GpuParticleBackend.js";
+import { CpuParticleBackend } from "jygame/particles/backends/CpuParticleBackend.js";
 import { SoAParticleStorage } from "jygame/particles/storage/SoAParticleStorage.js";
 import { CanvasParticleRenderer } from "jygame/particles/renderers/CanvasParticleRenderer.js";
 import { VelocityModifier, WindModifier, ColorModifier, ScaleModifier, FadeModifier } from "jygame";
@@ -141,14 +145,16 @@ import { VelocityModifier, WindModifier, ColorModifier, ScaleModifier, FadeModif
 class ExplosionEffect {
   constructor() {
     this.ps = new ParticleSystem({
-      backend: new GpuParticleBackend({
+      backend: new CpuParticleBackend({
         storage: new SoAParticleStorage({ capacity: 500 }),
         renderer: new CanvasParticleRenderer({
           renderParticle: (ctx, p) => {
+            ctx.globalAlpha = p.alpha;
             ctx.fillStyle = `rgb(${p.r | 0},${p.g | 0},${p.b | 0})`;
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
             ctx.fill();
+            ctx.globalAlpha = 1;
           },
         }),
       }),
@@ -163,7 +169,10 @@ class ExplosionEffect {
       system: this.ps,
       rate: 0,
       shape: new CircleShape({ radius: 8, direction: "outward", speed: [300, 600] }),
-      initializer: (p) => { p.maxLife = 0.6 + Math.random() * 0.6; },
+      initializer: (p) => {
+        p.maxLife = 0.6 + Math.random() * 0.6;
+        p.life = p.maxLife;
+      },
     });
   }
 
