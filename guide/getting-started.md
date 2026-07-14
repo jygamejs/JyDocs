@@ -62,28 +62,93 @@ The engine `Scene` automatically pushes an `InputContext` on enter and pops it o
 
 ## Particles
 
-Create emitters with modifiers for visual effects:
+The particle system uses a **backend architecture** — a `ParticleSystem` manages simulation and rendering, `ParticleEmitter` controls emission with shape-based spawning, and **modifiers** control particle behaviour over their lifetime.
+
+### Fire
+
+A continuous fire effect using a cone-shaped emitter:
 
 ```js
-import { ParticleEmitter, FadeModifier, ScaleModifier } from 'jygame'
+import {
+  ParticleSystem, ParticleEmitter, ConeShape,
+  FadeModifier, ScaleModifier, ColorModifier, VelocityModifier,
+} from "jygame";
+
+const ps = new ParticleSystem();
+ps.addModifier(new VelocityModifier({ drag: 0.3 }));
+ps.addModifier(new ColorModifier({ from: "#ffcc00", to: "#ff2200" }));
+ps.addModifier(new ScaleModifier({ from: 8, to: 2 }));
+ps.addModifier(new FadeModifier({ mode: "out" }));
 
 const emitter = new ParticleEmitter({
-  rate: 60,
-  lifetime: { min: 0.5, max: 1.5 },
-  speed: { min: 50, max: 150 },
-  startColor: '#ffd400',
-  endColor: '#ff0080',
-  startSize: 8,
-  endSize: 2,
+  system: ps,
+  rate: 120,
+  shape: new ConeShape({
+    radius: 15, angle: Math.PI / 3,
+    direction: -Math.PI / 2,
+    speed: [120, 200],
+  }),
+  initializer: (p) => {
+    p.maxLife = 1 + Math.random() * 1.5;
+    p.size = 4 + Math.random() * 6;
+  },
+});
+emitter.setPosition(400, 500);
+emitter.start();
+
+// Each frame:
+emitter.update(dt);
+ps.render(ctx);
+```
+
+### One-Shot Explosion
+
+Use `rate: 0` and `burst()` for instant effects:
+
+```js
+const boom = new ParticleSystem();
+boom.addModifier(new VelocityModifier({ drag: 0.6 }));
+boom.addModifier(new ColorModifier({ from: "#fff5e0", to: "#ff4400" }));
+boom.addModifier(new ScaleModifier({ from: 6, to: 0 }));
+boom.addModifier(new FadeModifier({ mode: "out" }));
+
+const boomEmitter = new ParticleEmitter({
+  system: boom,
+  rate: 0,
+  shape: new CircleShape({ radius: 8, direction: "outward", speed: [300, 600] }),
+  initializer: (p) => { p.maxLife = 0.6 + Math.random() * 0.6; },
 });
 
-emitter.position.set(400, 300);
-emitter.addModifier(new FadeModifier());
-emitter.addModifier(new ScaleModifier());
-
-// In scene update:
-emitter.update(dt);
+boomEmitter.setPosition(400, 300);
+boomEmitter.burst(100);
 ```
+
+### Available Shapes
+
+| Shape | Description |
+|-------|-------------|
+| `ConeShape` | Cone/spray (fire, water) |
+| `CircleShape` | Circle with radial spawn (explosions) |
+| `RectangleShape` | Rectangular area (rain) |
+| `RingShape` | Ring (orbit, vortex) |
+| `LineShape` | Line segment |
+| `PolygonShape` | Custom polygon |
+| `PathShape` | Curve path |
+
+### Available Modifiers
+
+| Modifier | Description |
+|----------|-------------|
+| `FadeModifier` | Fade alpha in/out |
+| `ScaleModifier` | Animate size with easing |
+| `VelocityModifier` | Apply drag |
+| `ColorModifier` | Lerp between two colors |
+| `TurbulenceModifier` | Perlin noise force |
+| `WindModifier` | Constant directional force |
+| `ForceModifier` | Gravity / custom acceleration |
+| `AttractionModifier` | Attract to a point |
+| `RotationModifier` | Spin particles |
+| `AnimatedSpriteModifier` | Sprite-sheet frames |
 
 ## Audio
 
