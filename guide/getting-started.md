@@ -14,51 +14,51 @@ import { Game } from 'https://unpkg.com/jygame@latest/jygame.js'
 
 ## Your First Game
 
-Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query. The [new InputSystem](/api/input/input-system) (v0.8.1+) provides device-oriented input with action maps and context stacks.
+Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query. The [InputSystem](/api/input/input-system) (v0.8.1+) provides device-oriented input with action maps and context stacks.
 
 ```js
-import { Game, Scene } from 'jygame'
-import { Transform, Velocity, Renderable, Visible, Collider, RenderBounds } from 'jygame'
-import { KeyBinding, CompositeBinding, ActionKind, KeyCode } from 'jygame'
+import {
+  Game, Scene,
+  Sprite, Colors,
+  ActionKind, CompositeBinding, KeyBinding, KeyCode,
+} from "jygame";
 
-const scene = new Scene()
+class MyScene extends Scene {
+  onEnter() {
+    this.player = new Sprite(100, 100, 32, 32, this.world);
+    this.player.style.fill = Colors.GreenShades.MagicalMalachite;
 
-scene.enter = function () {
-  const world = this.world // each Scene has its own World
+    const move = new CompositeBinding(ActionKind.VECTOR2, [
+      { binding: new KeyBinding(KeyCode.KEY_D),        vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_A),        vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_W),        vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.KEY_S),        vector: [ 0,  1] },
+      { binding: new KeyBinding(KeyCode.ARROW_RIGHT),  vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_LEFT),   vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_UP),     vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.ARROW_DOWN),   vector: [ 0,  1] },
+    ]);
+    this._actionMap.bind("move", move, ActionKind.VECTOR2);
+  }
 
-  const player = world.createEntity()
-  world.addMany(player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
-  world.set(player, Transform, { x: 400, y: 300, scaleX: 1, scaleY: 1 })
-  world.set(player, Collider, { width: 32, height: 32 })
-  world.set(player, RenderBounds, { width: 32, height: 32 })
-  world.set(player, Renderable, { fillColor: 0x63B44EFF, shape: 0 })
-  world.set(player, Visible, { value: 1 })
+  update(dt) {
+    const speed = 400;
+    const m = this._actionMap.getState("move").vector;
+    this.player.velocity.x = m.x * speed;
+    this.player.velocity.y = m.y * speed;
+  }
 
-  // Bind WASD movement using the new InputSystem
-  this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
-    { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
-    { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },
-    { vector: [0, -1], binding: new KeyBinding(KeyCode.KEY_W) },
-    { vector: [0, 1],  binding: new KeyBinding(KeyCode.KEY_S) },
-  ]));
-
-  this.player = player
+  render(ctx) {
+    ctx.fillStyle = this.player.style.fill;
+    ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
+  }
 }
 
-scene.update = function (dt) {
-  const move = this._actionMap.getState("move");
-  const vel = this.world.get(this.player, Velocity);
-  vel.x = move.vector.x * 200;
-  vel.y = move.vector.y * 200;
-}
-
-const game = new Game({ width: 800, height: 600, debug: true })
-game.run(scene)
+const game = new Game({ width: 800, height: 600 });
+game.run(new MyScene());
 ```
 
-Press the backtick (`` ` ``) key to open the in-game debug overlay — it shows FPS, frame timing, and lets you browse metrics.
-
-No manual system calls — the `DefaultWorldBuilder` registers `MovementSystem` and `RenderSystem` automatically. Just call `world.update(dt)` inside the scene's update, which is handled by the engine `Scene`.
+The engine `Scene` automatically pushes an `InputContext` on enter and pops it on exit, so your action bindings are active only while the scene is on top.
 
 ## Particles
 
