@@ -33,8 +33,8 @@ const game = new Game(options)
 | `sceneCount` | `number` | Number of scenes on the stack (getter) |
 | `clock` | `Clock` | Internal fixed-timestep clock |
 | `input` | `InputContext` | The game's input context instance |
-| `inputSystem` | `InputSystem` | The new input system (v0.8.1+), with device registry, context stack, and coordinate transforms |
-| `debug` | `OverlayHost` | The debug overlay host (lazily created, v0.8.2+) — use `.show()`, `.hide()`, `.toggle()` |
+| `inputSystem` | `InputSystem` | The input system with device registry, context stack, and coordinate transforms |
+| `debug` | `OverlayHost` | The debug overlay host (lazily created) — use `.show()`, `.hide()`, `.toggle()` |
 | `fps` | `number` | Smoothed real-time FPS (read-only) |
 | `isPaused` | `boolean` | Whether the game is paused (getter) |
 

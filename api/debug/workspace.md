@@ -1,7 +1,5 @@
 # Debug Workspace
 
-<Badge type="info">New in v0.8.2</Badge>
-
 ## Overview
 
 The debug workspace is a separate browser window that connects to the running game via `BroadcastChannel` and receives real-time ECS world snapshots. It provides the same views as the in-game overlay but in a standalone tabbed interface.

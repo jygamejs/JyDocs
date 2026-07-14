@@ -1,7 +1,5 @@
 # Input Devices
 
-<Badge type="info">New in v0.8.1</Badge>
-
 ## Overview
 
 The input system uses **device objects** that consume `InputEvent` objects from the shared event queue and expose typed state. Devices are registered in the `DeviceRegistry` owned by `InputSystem`.

@@ -1,7 +1,5 @@
 # World Snapshots
 
-<Badge type="info">New in v0.8.2</Badge>
-
 ## Overview
 
 The snapshot system serializes the full ECS world state each frame for inspection in the debug workspace. All snapshot objects are pooled to avoid GC pressure.

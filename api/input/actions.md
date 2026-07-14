@@ -1,7 +1,5 @@
 # Action System
 
-<Badge type="info">New in v0.8.1</Badge>
-
 ## Overview
 
 The action system maps abstract game actions (e.g., "jump", "move", "shoot") to concrete input bindings. It provides priority-sorted context stacks, typed bindings, signal processors, and full serialization support.

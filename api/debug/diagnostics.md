@@ -1,7 +1,5 @@
 # Diagnostics Engine
 
-<Badge type="info">New in v0.8.2</Badge>
-
 ## Overview
 
 The `Diagnostics` class is a per-frame metrics engine that records timers, counters, gauges, and events. It maintains a ring-buffer history, supports configurable triggers and captures, and can export/import full sessions as JSON.

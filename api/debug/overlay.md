@@ -1,10 +1,8 @@
 # In-Game Overlay
 
-<Badge type="info">New in v0.8.2</Badge>
-
 ## Overview
 
-The `OverlayHost` renders a real-time diagnostic HUD directly on top of the game canvas. It is toggled with the backtick (`` ` ``) key.
+The `OverlayHost` renders a real-time diagnostic HUD directly on top of the game canvas.
 
 ## Access
 

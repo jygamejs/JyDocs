@@ -1,7 +1,5 @@
 # Debug / Diagnostics — Getting Started
 
-<Badge type="info">New in v0.8.2</Badge>
-
 ## Overview
 
 JyGame ships with a built-in debugging and diagnostics suite that provides real-time performance metrics, ECS world snapshots, an in-game overlay HUD, and a separate workspace window for deep inspection.
@@ -23,17 +21,7 @@ To disable: `debug: false`.
 
 ## Quick Start
 
-### In-Game Overlay
-
-Press the **backtick** (`` ` ``) key to toggle the overlay HUD:
-
-| Key | Action |
-|-----|--------|
-| `` ` `` | Toggle overlay |
-| `1`–`6` | Toggle individual views |
-| `Ctrl+I` | Manual frame capture |
-
-Views available:
+The debug overlay provides 7 views accessible programmatically:
 - **Performance** — FPS, frame time budget bars
 - **Frame Graph** — Metric lines over time with category toggle pills
 - **Timeline** — Per-frame event timeline

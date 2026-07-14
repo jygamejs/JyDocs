@@ -1,7 +1,5 @@
 # Input Events & Backends
 
-<Badge type="info">New in v0.8.1</Badge>
-
 ## InputEvent
 
 Event envelope produced by backends and consumed by devices.

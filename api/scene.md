@@ -21,7 +21,7 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | `scene.world` | `World` | | The scene's ECS World (lazily created) |
 | `scene.blocksUpdateBelow` | `boolean` | `true` | Pause `update()` on scenes below |
 | `scene.blocksRenderBelow` | `boolean` | `false` | Skip `render()` on scenes below |
-| `scene._actionMap` | `ActionMap` | (internal) | Scene-specific action bindings for the new InputSystem (v0.8.1+) |
+| `scene._actionMap` | `ActionMap` | (internal) | Scene-specific action bindings for the InputSystem |
 | `scene._inputPriority` | `number` | `0` | Input context priority for this scene |
 | `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `enter()`, popped on `exit()` |
 
@@ -65,7 +65,7 @@ scene.enter = function () {
   world.set(this.player, Transform, { x: 400, y: 300 })
   world.set(this.player, Renderable, { fillColor: 0x63B44EFF })
 
-  // Bind actions using the new InputSystem (v0.8.1+)
+  // Bind actions using the InputSystem
   this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
     { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
     { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },

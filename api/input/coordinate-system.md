@@ -1,7 +1,5 @@
 # Coordinate System
 
-<Badge type="info">New in v0.8.1</Badge>
-
 ## Overview
 
 The `CoordinateSystem` transforms coordinates across four spaces, enabling consistent conversion between screen pixels and world/game coordinates.

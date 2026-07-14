@@ -380,7 +380,7 @@ The camera is wired automatically in `Scene.enter()`.
 - [Gestures](/api/input/gestures) — gesture recognition
 - [Coordinate System](/api/input/coordinate-system) — space transforms
 
-## Debug & Diagnostics (v0.8.2+)
+## Debug & Diagnostics
 
 JyGame ships with a built-in debugging and diagnostics suite providing real-time performance metrics, an in-game overlay HUD, and a standalone workspace window.
 
@@ -390,16 +390,10 @@ Debug is enabled by default (`debug: true` in `Game` constructor). The diagnosti
 
 ### In-Game Overlay
 
-Press the backtick (`` ` ``) key to toggle the overlay HUD with 7 views:
-
-| Key | View | Description |
-|-----|------|-------------|
-| `` ` `` | Toggle overlay | Show/Hide the HUD |
-| `1`–`6` | Individual views | Performance, Frame Graph, Timeline, Metrics, Events, Captures |
-| `Ctrl+I` | Manual capture | Save the last N frames for analysis |
+The overlay provides programmatic access with keyboard shortcuts for individual views and manual captures:
 
 ```js
-game.debug.show();   // programmatic toggle
+game.debug.show();
 game.debug.hide();
 game.debug.toggle();
 ```

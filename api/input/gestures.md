@@ -1,7 +1,5 @@
 # Gesture Recognition
 
-<Badge type="info">New in v0.8.1</Badge>
-
 ## Overview
 
 The gesture recognition system detects multi-touch and pointer gestures through composable recognizer objects managed by a `GestureEngine`. The `GestureEngine` is registered as a device and runs all recognizers each frame.

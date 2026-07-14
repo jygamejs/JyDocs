@@ -14,7 +14,7 @@ import { Game } from 'https://unpkg.com/jygame@latest/jygame.js'
 
 ## Your First Game
 
-Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query. The [InputSystem](/api/input/input-system) (v0.8.1+) provides device-oriented input with action maps and context stacks.
+Jygame uses an **Entity-Component-System (ECS)** architecture. Entities are integer IDs, components are typed data containers, and systems process entities matching a component query. The [InputSystem](/api/input/input-system) provides device-oriented input with action maps and context stacks.
 
 ```js
 import {
