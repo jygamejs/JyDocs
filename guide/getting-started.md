@@ -66,39 +66,65 @@ The particle system uses a **backend architecture** — a `ParticleSystem` manag
 
 ### Fire
 
-A continuous fire effect using a cone-shaped emitter:
+A continuous fire effect using a cone-shaped emitter. Always specify a backend and storage capacity for performance:
 
 ```js
 import {
   ParticleSystem, ParticleEmitter, ConeShape,
   FadeModifier, ScaleModifier, ColorModifier, VelocityModifier,
+  GpuParticleBackend, SoAParticleStorage, CanvasParticleRenderer,
 } from "jygame";
 
-const ps = new ParticleSystem();
-ps.addModifier(new VelocityModifier({ drag: 0.3 }));
-ps.addModifier(new ColorModifier({ from: "#ffcc00", to: "#ff2200" }));
-ps.addModifier(new ScaleModifier({ from: 8, to: 2 }));
-ps.addModifier(new FadeModifier({ mode: "out" }));
+class FireScene extends Scene {
+  onEnter() {
+    this.ps = new ParticleSystem({
+      backend: new GpuParticleBackend({
+        storage: new SoAParticleStorage({ capacity: 1000 }),
+        renderer: new CanvasParticleRenderer({
+          renderParticle: (ctx, p) => {
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = `rgb(${p.r | 0},${p.g | 0},${p.b | 0})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          },
+        }),
+      }),
+    });
+    this.ps.addModifier(new VelocityModifier({ drag: 0.3 }));
+    this.ps.addModifier(new ColorModifier({ from: "#ffcc00", to: "#ff2200" }));
+    this.ps.addModifier(new ScaleModifier({ from: 8, to: 2 }));
+    this.ps.addModifier(new FadeModifier({ mode: "out" }));
 
-const emitter = new ParticleEmitter({
-  system: ps,
-  rate: 120,
-  shape: new ConeShape({
-    radius: 15, angle: Math.PI / 3,
-    direction: -Math.PI / 2,
-    speed: [120, 200],
-  }),
-  initializer: (p) => {
-    p.maxLife = 1 + Math.random() * 1.5;
-    p.size = 4 + Math.random() * 6;
-  },
-});
-emitter.setPosition(400, 500);
-emitter.start();
+    this.emitter = new ParticleEmitter({
+      system: this.ps,
+      rate: 120,
+      shape: new ConeShape({
+        radius: 15, angle: Math.PI / 3,
+        direction: -Math.PI / 2,
+        speed: [120, 200],
+      }),
+      initializer: (p) => {
+        p.maxLife = 1 + Math.random() * 1.5;
+        p.size = 4 + Math.random() * 6;
+      },
+    });
+    this.emitter.setPosition(400, 500);
+    this.emitter.start();
+  }
 
-// Each frame:
-emitter.update(dt);
-ps.render(ctx);
+  update(dt) {
+    this.emitter.update(dt);
+    this.ps.update(dt);
+  }
+
+  render(ctx) {
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(0, 0, 800, 600);
+    this.ps.render(ctx);
+  }
+}
 ```
 
 ### One-Shot Explosion
@@ -106,21 +132,45 @@ ps.render(ctx);
 Use `rate: 0` and `burst()` for instant effects:
 
 ```js
-const boom = new ParticleSystem();
-boom.addModifier(new VelocityModifier({ drag: 0.6 }));
-boom.addModifier(new ColorModifier({ from: "#fff5e0", to: "#ff4400" }));
-boom.addModifier(new ScaleModifier({ from: 6, to: 0 }));
-boom.addModifier(new FadeModifier({ mode: "out" }));
+import { CircleShape, WindModifier } from "jygame";
 
-const boomEmitter = new ParticleEmitter({
-  system: boom,
-  rate: 0,
-  shape: new CircleShape({ radius: 8, direction: "outward", speed: [300, 600] }),
-  initializer: (p) => { p.maxLife = 0.6 + Math.random() * 0.6; },
-});
+class ExplosionEffect {
+  constructor() {
+    this.ps = new ParticleSystem({
+      backend: new GpuParticleBackend({
+        storage: new SoAParticleStorage({ capacity: 500 }),
+        renderer: new CanvasParticleRenderer({
+          renderParticle: (ctx, p) => {
+            ctx.fillStyle = `rgb(${p.r | 0},${p.g | 0},${p.b | 0})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          },
+        }),
+      }),
+    });
+    this.ps.addModifier(new VelocityModifier({ drag: 0.6 }));
+    this.ps.addModifier(new WindModifier({ y: 40 }));
+    this.ps.addModifier(new ColorModifier({ from: "#fff5e0", to: "#ff4400" }));
+    this.ps.addModifier(new ScaleModifier({ from: 6, to: 0 }));
+    this.ps.addModifier(new FadeModifier({ mode: "out" }));
 
-boomEmitter.setPosition(400, 300);
-boomEmitter.burst(100);
+    this.emitter = new ParticleEmitter({
+      system: this.ps,
+      rate: 0,
+      shape: new CircleShape({ radius: 8, direction: "outward", speed: [300, 600] }),
+      initializer: (p) => { p.maxLife = 0.6 + Math.random() * 0.6; },
+    });
+  }
+
+  explode(x, y) {
+    this.emitter.setPosition(x, y);
+    this.emitter.burst(80);
+  }
+
+  update(dt) { this.ps.update(dt); }
+  render(ctx) { this.ps.render(ctx); }
+}
 ```
 
 ### Available Shapes
