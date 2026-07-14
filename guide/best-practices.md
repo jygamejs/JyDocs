@@ -29,15 +29,16 @@ game.switchScene(new MenuScene())  // ✅
 game.switchScene(menuScene)         // ❌ already exited
 ```
 
-### Setup in `enter()`, Teardown in `exit()`
+### Setup in `onEnter()`, Teardown in `exit()`
 
 ```js
 class GameScene extends Scene {
-  enter() {
+  onEnter() {
     const world = this.world
     this.player = world.createEntity()
     world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
-    this.on(Input, 'keydown', this.handleInput)
+
+    this._actionMap.bind("jump", new KeyBinding(KeyCode.SPACE));
   }
 }
 ```
@@ -48,8 +49,11 @@ Push overlays (pause, inventory) on top instead of switching scenes:
 
 ```js
 class GameScene extends Scene {
+  onEnter() {
+    this._actionMap.bind("pause", new KeyBinding(KeyCode.ESCAPE));
+  }
   update(dt) {
-    if (Input.justPressed('ESCAPE')) {
+    if (this._actionMap.getState("pause").justPressed) {
       this.pushScene(new PauseScene())
     }
   }
@@ -242,7 +246,7 @@ gameState.subscribe(s => {
 
 ```js
 class BootScene extends Scene {
-  async enter() {
+  async onEnter() {
     const task = ImageLoader.loadAll({
       player: 'player.png',
       enemy: 'enemy.png',
