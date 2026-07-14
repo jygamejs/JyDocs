@@ -69,11 +69,11 @@ The particle system uses a **backend architecture** — a `ParticleSystem` manag
 A continuous fire effect using a cone-shaped emitter. Always specify a backend and storage capacity for performance:
 
 ```js
-import {
-  ParticleSystem, ParticleEmitter, ConeShape,
-  FadeModifier, ScaleModifier, ColorModifier, VelocityModifier,
-  GpuParticleBackend, SoAParticleStorage, CanvasParticleRenderer,
-} from "jygame";
+import { ParticleSystem, ParticleEmitter, ConeShape } from "jygame";
+import { GpuParticleBackend } from "jygame/particles/backends/GpuParticleBackend.js";
+import { SoAParticleStorage } from "jygame/particles/storage/SoAParticleStorage.js";
+import { CanvasParticleRenderer } from "jygame/particles/renderers/CanvasParticleRenderer.js";
+import { FadeModifier, ScaleModifier, ColorModifier, VelocityModifier } from "jygame";
 
 class FireScene extends Scene {
   onEnter() {
@@ -132,7 +132,11 @@ class FireScene extends Scene {
 Use `rate: 0` and `burst()` for instant effects:
 
 ```js
-import { CircleShape, WindModifier } from "jygame";
+import { ParticleSystem, ParticleEmitter, CircleShape } from "jygame";
+import { GpuParticleBackend } from "jygame/particles/backends/GpuParticleBackend.js";
+import { SoAParticleStorage } from "jygame/particles/storage/SoAParticleStorage.js";
+import { CanvasParticleRenderer } from "jygame/particles/renderers/CanvasParticleRenderer.js";
+import { VelocityModifier, WindModifier, ColorModifier, ScaleModifier, FadeModifier } from "jygame";
 
 class ExplosionEffect {
   constructor() {
