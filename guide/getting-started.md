@@ -186,6 +186,35 @@ class ExplosionEffect {
 }
 ```
 
+Usage inside a scene:
+
+```js
+import { Game, Scene, KeyCode, KeyBinding, ActionKind } from "jygame";
+
+class MyScene extends Scene {
+  onEnter() {
+    this._actionMap.bind("shoot", new KeyBinding(KeyCode.SPACE), ActionKind.DIGITAL);
+    this.explosion = new ExplosionEffect();
+  }
+
+  update(dt) {
+    this.explosion.update(dt);
+    if (this._actionMap.getState("shoot").justPressed) {
+      this.explosion.explode(400, 300);
+    }
+  }
+
+  render(ctx) {
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, 800, 600);
+    this.explosion.render(ctx);
+  }
+}
+
+const game = new Game({ parent: document.body, width: 800, height: 600 });
+game.run(new MyScene());
+```
+
 ### Available Shapes
 
 | Shape | Description |
