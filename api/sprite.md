@@ -81,7 +81,7 @@ The static `Sprite._defaultWorld` is used when no World is provided. The engine 
 ## Example
 
 ```js
-import { Game, Scene, Sprite, Input } from 'jygame'
+import { Game, Scene, Sprite, ActionKind, CompositeBinding, KeyBinding, KeyCode } from 'jygame'
 
 const player = new Sprite(100, 200, 32, 48)
 player.style.fill = '#63B44E'
@@ -89,16 +89,20 @@ player.style.fill = '#63B44E'
 const scene = new Scene()
 scene.enter = function () {
   // Sprite._defaultWorld is already set to this.world by engine Scene
+
+  const move = new CompositeBinding(ActionKind.VECTOR2, [
+    { binding: new KeyBinding(KeyCode.KEY_D),       vector: [ 1,  0] },
+    { binding: new KeyBinding(KeyCode.KEY_A),       vector: [-1,  0] },
+    { binding: new KeyBinding(KeyCode.KEY_W),       vector: [ 0, -1] },
+    { binding: new KeyBinding(KeyCode.KEY_S),       vector: [ 0,  1] },
+  ]);
+  this._actionMap.bind("move", move, ActionKind.VECTOR2);
 }
 
 scene.update = function (dt) {
-  if (Input.isDown('RIGHT')) player.velocity.x = 200
-  else if (Input.isDown('LEFT')) player.velocity.x = -200
-  else player.velocity.x = 0
-
-  if (Input.isDown('UP')) player.velocity.y = -200
-  else if (Input.isDown('DOWN')) player.velocity.y = 200
-  else player.velocity.y = 0
+  const m = this._actionMap.getState("move").vector;
+  player.velocity.x = m.x * 200;
+  player.velocity.y = m.y * 200;
 }
 
 const game = new Game({ width: 800, height: 600 })

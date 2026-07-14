@@ -121,9 +121,9 @@ Cover:
 - `BrowserBackend`: DOM listener → event producer
 - `TestBackend`: programmatic event injection
 
-### Update existing: `api/input.md` (old Input facade)
+### Update existing: `api/input.md`
 
-Document that the old `Input` singleton still works but is superseded by `InputSystem`. Show both approaches.
+Document the `InputSystem` approach. The old `Input` singleton is removed from sidebar.
 
 ---
 
@@ -243,7 +243,7 @@ Check that existing ECS/component/system pages are still accurate (they should b
 
 | Page | Risk | Reason |
 |------|------|--------|
-| `api/input.md` (old) | HIGH | Old Input facade still works but new InputSystem is parallel |
+| `api/input.md` (old) | HIGH | Removed — replaced by InputSystem docs |
 | `api/ecs/world.md` | LOW | No ECS changes |
 | `api/ecs/entity.md` | LOW | No changes |
 | All component pages | LOW | No component changes |

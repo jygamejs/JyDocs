@@ -137,8 +137,8 @@ scene.renderUI = function () {
 | Method | Description |
 |--------|-------------|
 | `on(target, event, handler)` | DOM listener, auto-cleaned on exit |
-| `onSwipe(cb)` | `Input.onSwipe` with auto-cleanup |
-| `onTap(cb)` | `Input.onTap` with auto-cleanup |
+| `onSwipe(cb)` | Swipe gesture listener, auto-cleaned on exit |
+| `onTap(cb)` | Tap gesture listener, auto-cleaned on exit |
 | `cleanup(fn)` | Manually push to cleanup stack |
 
 ```js

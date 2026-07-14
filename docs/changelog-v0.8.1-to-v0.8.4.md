@@ -8,7 +8,7 @@
 
 ### New `input/` directory (39 files)
 
-Complete rewrite of the input architecture. The old `Input` singleton facade is preserved and still functional, but the new system runs in parallel.
+Complete rewrite of the input architecture. The new `InputSystem` with DeviceRegistry, ContextStack, and ActionMap replaces the previous singleton.
 
 **Core infrastructure:**
 
@@ -283,7 +283,7 @@ OverlayHost, OverlayLayout
 
 ```
 DefaultWorldBuilder (from ecs/bootstrap/)
-OldInputContext (renamed from old InputContext)
+InputContext (renamed from old InputContext)
 ```
 
 ### Path change

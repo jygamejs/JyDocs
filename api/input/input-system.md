@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `InputSystem` is the central orchestrator of the new input architecture introduced in v0.8.1. It replaces the legacy `Input` singleton facade with an event-driven, device-oriented pipeline.
+The `InputSystem` is the central orchestrator of the input architecture introduced in v0.8.1. It provides an event-driven, device-oriented pipeline for processing input.
 
 ## Architecture
 

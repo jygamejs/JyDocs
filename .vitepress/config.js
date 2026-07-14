@@ -122,13 +122,6 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Input (Legacy)',
-          items: [
-            { text: 'Input', link: '/api/input' },
-            { text: 'InputContext', link: '/api/input-context' },
-          ],
-        },
-        {
           text: 'Time',
           items: [
             { text: 'Clock', link: '/api/clock' },

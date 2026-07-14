@@ -274,13 +274,9 @@ The `CoordinateSystem` uses the scene's camera for the VIEWPORT ↔ WORLD transf
 const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
 ```
 
-## Input (Legacy Facade)
+## Input System
 
-The `Input` global facade provides access to keyboard, pointer, and gesture input. It delegates to the game's default `InputContext` instance. This API is still available but superseded by the Input System below.
-
-## Input System (v0.8.1+)
-
-The `InputSystem` is an event-driven, device-oriented input architecture introduced in v0.8.1. It replaces the legacy `Input` facade with a layered pipeline:
+The `InputSystem` is an event-driven, device-oriented input architecture with a layered pipeline:
 
 ```
 DOM Events → Backend → InputEventQueue → Devices → ContextStack → Action States
