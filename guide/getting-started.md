@@ -62,14 +62,66 @@ The engine `Scene` automatically pushes an `InputContext` on enter and pops it o
 
 ## Particles
 
+Create emitters with modifiers for visual effects:
+
 ```js
-import { ParticleSystem, ParticleEmitter, FadeModifier, ScaleModifier } from 'jygame'
+import { ParticleEmitter, FadeModifier, ScaleModifier } from 'jygame'
+
+const emitter = new ParticleEmitter({
+  rate: 60,
+  lifetime: { min: 0.5, max: 1.5 },
+  speed: { min: 50, max: 150 },
+  startColor: '#ffd400',
+  endColor: '#ff0080',
+  startSize: 8,
+  endSize: 2,
+});
+
+emitter.position.set(400, 300);
+emitter.addModifier(new FadeModifier());
+emitter.addModifier(new ScaleModifier());
+
+// In scene update:
+emitter.update(dt);
 ```
 
 ## Audio
 
+Play sound effects and music with the audio manager:
+
 ```js
-import { AudioManager, WebAudioBackend, LowPassEffect } from 'jygame'
+import { AudioManager } from 'jygame'
+
+const audio = new AudioManager();
+
+// Load and play a sound
+await audio.load('jump', 'sounds/jump.wav');
+audio.play('jump');
+
+// Background music with loop
+await audio.load('music', 'sounds/bg.ogg');
+audio.play('music', { loop: true, volume: 0.5 });
+```
+
+## Assets
+
+Load images and fonts with progress tracking:
+
+```js
+import { ImageLoader, FontLoader } from 'jygame'
+
+const task = ImageLoader.loadAll({
+  player: 'assets/player.png',
+  enemy: 'assets/enemy.png',
+  bg: 'assets/background.png',
+});
+
+task.onProgress((loaded, total) => {
+  console.log(`${loaded} / ${total}`);
+});
+
+const assets = await task;
+// assets.player → HTMLImageElement
 ```
 
 ## Project Structure
