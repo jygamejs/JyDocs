@@ -54,9 +54,11 @@ class MyScene extends Scene {
   }
 }
 
-const game = new Game({ width: 800, height: 600 });
+const game = new Game({ width: 800, height: 600, interpolation: true });
 game.run(new MyScene());
 ```
+
+By default Jygame uses **fixed-timestep interpolation** — the game logic updates at a configurable `fps` rate (default 60), while rendering runs at the display refresh rate. Between logic ticks, the engine smoothly interpolates entity positions so movement stays fluid even at lower tick rates. Pass `interpolation: false` to skip this and use raw fixed-step positions directly.
 
 The engine `Scene` automatically pushes an `InputContext` on enter and pops it on exit, so your action bindings are active only while the scene is on top.
 
@@ -287,7 +289,131 @@ const assets = await task;
 // assets.player → HTMLImageElement
 ```
 
-## Project Structure
+## Animations
+
+Jygame supports sprite animations through `AnimationClip`, `AnimationPack`, and `Sprite.animation`.
+
+### Manual Animation Setup
+
+Load frame images individually and build a clip:
+
+```js
+import { AnimationClip } from "jygame";
+
+const assets = await ImageLoader.loadAll({
+  idle0: "/player/idle/1.png",
+  idle1: "/player/idle/2.png",
+  idle2: "/player/idle/3.png",
+  idle3: "/player/idle/4.png",
+});
+
+const clip = new AnimationClip({
+  frames: [assets.idle0, assets.idle1, assets.idle2, assets.idle3],
+  fps: 8,
+  loop: true,
+});
+
+sprite.animation.add("idle", clip);
+sprite.animation.play("idle");
+```
+
+### Convention-Based Loading with AnimationPack
+
+For projects with many animations, `AnimationPack.load()` eliminates the boilerplate by deriving file paths from a directory convention:
+
+```
+assets/player/
+  idle/
+    1.png
+    2.png
+    3.png
+    4.png
+  walk/
+    1.png
+    2.png
+    ...
+  attack/
+    1.png
+    ...
+```
+
+```js
+import { AnimationPack } from "jygame";
+
+const anims = await AnimationPack.load({
+  path: "/assets/player",
+
+  defaults: { fps: 8, loop: true },
+
+  idle: 4,
+  walk: 8,
+
+  attack: {
+    frames: 6,
+    fps: 16,
+    loop: false,
+  },
+});
+
+sprite.animation.addAll(anims);
+sprite.animation.play("idle");
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | string | required | Base directory containing animation folders |
+| `defaults` | object | `{}` | Shared settings inherited by all animations |
+| `{name}: N` | number | — | Shorthand for `{ frames: N }` |
+| `{name}: {...}` | object | — | Full animation config |
+
+**Animation config fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `frames` | number | required | Number of frames in the sequence |
+| `fps` | number | 8 | Playback speed in frames per second |
+| `loop` | boolean | true | Whether the animation loops |
+| `extension` | string | "png" | Image file extension |
+| `padding` | number | 0 | Zero-pad frame numbers (e.g. `01.png`) |
+| `prefix` | string | "" | Prefix before frame number in filename |
+| `suffix` | string | "" | Suffix after frame number in filename |
+| `pingPong` | boolean | false | Play forward then reverse |
+| `from` / `to` | number | — | Alternative to `frames` for explicit range |
+
+**Naming conventions:**
+
+```js
+// padding: 2  →  assets/player/idle/01.png, 02.png, 03.png, 04.png
+// prefix: "walk_", padding: 2  →  assets/player/walk/walk_01.png, ...
+// suffix: "_idle", padding: 2  →  assets/player/idle/01_idle.png, ...
+// extension: "webp"  →  assets/player/idle/1.webp, 2.webp, ...
+```
+
+### Sprite Animation API
+
+```js
+const anim = sprite.animation;
+
+// Add clips
+anim.add("idle", clip);
+anim.addAll({ walk: clipA, attack: clipB });  // bulk add
+
+// Control playback
+anim.play("idle");   // start playing
+anim.pause();
+anim.resume();
+anim.stop();
+anim.onComplete(() => console.log("done"));
+
+// State
+anim.current;        // name of the currently playing clip
+anim.playing;        // boolean
+anim.animations;     // Map<string, AnimationClip>
+```
+
+Internally, `AnimationSystem` (an ECS system, priority 1) advances each entity's `Animation` component each tick, writing the correct frame's image ID into `Renderable.image` for the render pipeline.
 
 ```
 my-game/
