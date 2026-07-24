@@ -144,12 +144,8 @@ class GameScene extends Scene {
 For coordinate conversion (screen ↔ world):
 
 ```js
-// Via the View
 const worldPt = this.view.screenToWorld(screenX, screenY);
 const screenPt = this.view.worldToScreen(worldX, worldY);
-
-// Or via the InputSystem's CoordinateSystem
-const pt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
 ```
 
 ## Game Loop

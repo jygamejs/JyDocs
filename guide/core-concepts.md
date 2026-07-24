@@ -272,12 +272,8 @@ class GameScene extends Scene {
 ### Coordinate Conversion
 
 ```js
-// Via the View
 const worldPt = this.view.screenToWorld(screenX, screenY);
 const screenPt = this.view.worldToScreen(worldX, worldY);
-
-// Via the InputSystem's CoordinateSystem
-const pt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
 ```
 
 ### Multiple Views
@@ -349,17 +345,22 @@ The engine Scene automatically creates an `InputContext`, pushes it on `onEnter(
 
 ### Coordinate System
 
-The `CoordinateSystem` transforms between four spaces:
+The `CoordinateSystem` transforms between four spaces. For world ↔ viewport conversion, use the View directly (the camera is no longer set on the CoordinateSystem automatically):
 
 | Space | Description |
 |-------|-------------|
 | `Space.SCREEN` | Raw DOM client coordinates |
 | `Space.VIEWPORT` | Logical canvas pixels (minus offset ÷ DPR) |
-| `Space.WORLD` | Game world coordinates (camera-projected) |
+| `Space.WORLD` | Game world coordinates (projected through the View's camera) |
 | `Space.UI` | Overlay coordinates (identity with viewport) |
 
 ```js
-const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: 100, y: 200 });
+// Screen → Viewport (no camera needed)
+const vp = game.inputSystem.coordinateSystem.toViewport({ x: 100, y: 200 });
+
+// Viewport ↔ World (use the View)
+const worldPt = this.view.screenToWorld(vp.x, vp.y);
+const screenPt = this.view.worldToScreen(worldX, worldY);
 ```
 
 ### See Also
