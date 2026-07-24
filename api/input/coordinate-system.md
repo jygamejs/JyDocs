@@ -25,7 +25,7 @@ new CoordinateSystem({
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `camera` | `null` | Camera object with `project`/`unproject` or `worldToScreen`/`screenToWorld` |
+| `camera` | `null` | View or Camera object used for world ↔ viewport transforms (get/set) |
 | `canvasRect` | `{ x: 0, y: 0, width: 800, height: 600 }` | Canvas bounding rect in screen coordinates |
 | `devicePixelRatio` | `1` | Window device pixel ratio (`window.devicePixelRatio`) |
 
@@ -35,7 +35,7 @@ The `CoordinateSystem` is created by `Game` and accessible via `game.inputSystem
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `camera` | `object\|null` | Camera used for world ↔ viewport transforms (get/set) |
+| `camera` | `object\|null` | View or Camera used for world ↔ viewport transforms (get/set) |
 | `canvasRect` | `{ x, y, width, height }` | Canvas rect (get/set, returns a copy) |
 | `devicePixelRatio` | `number` | Device pixel ratio (get/set) |
 
@@ -44,19 +44,21 @@ The `CoordinateSystem` is created by `Game` and accessible via `game.inputSystem
 | Method | Description |
 |--------|-------------|
 | `toViewport(screenPoint)` | Screen → Viewport: subtract canvas offset, divide by DPR |
-| `toWorld(viewportPoint)` | Viewport → World: calls `camera.unproject()` |
+| `toWorld(viewportPoint)` | Viewport → World: delegates to the assigned camera/view |
 | `toUI(viewportPoint)` | Viewport → UI: identity (UI uses viewport coords) |
-| `toScreen(worldPoint)` | World → Screen: camera project + DPR scale + canvas offset |
+| `toScreen(worldPoint)` | World → Screen: camera/view project + DPR scale + canvas offset |
 | `transform(point, fromSpace, toSpace)` | Generic transform between any two spaces |
 
-## Camera Integration
+## Coordinate Conversion via Views
 
-The `CoordinateSystem` uses the active scene's camera for world/viewport transforms. This is wired automatically in `Scene.onEnter()`:
+For world ↔ viewport coordinate conversion, prefer using the View directly — Camera no longer has `project`/`unproject` methods:
 
 ```js
-// Inside core/Scene.js enter():
-coordSystem.camera = cam;
+const worldPt = this.view.screenToWorld(screenX, screenY);
+const screenPt = this.view.worldToScreen(worldX, worldY);
 ```
+
+The `CoordinateSystem` can still be used for screen ↔ viewport conversion (which does not involve the camera):
 
 ## Example
 

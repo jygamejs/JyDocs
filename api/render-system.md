@@ -1,84 +1,50 @@
 # RenderSystem
 
-The `RenderSystem` handles drawing entities to the Canvas 2D context. It applies the current `Camera` transform, performs viewport culling, and delegates drawing to each entity's `Renderable`.
+The `RenderSystem` is an ECS system that collects all visible, renderable entities and pushes them into the `RenderQueue` each frame. It does **not** apply camera transforms or draw directly to the canvas — that is handled by the Scene's `View` pipeline.
 
-A singleton `renderSystem` instance is exported and used internally by various workflows.
-
-## Constructor
+## Query
 
 ```js
-new RenderSystem()
+static query = { all: [Transform, Renderable, RenderBounds, Visible] }
+static priority = 3
 ```
 
-## Methods
+The system iterates entities matching `Transform + Renderable + RenderBounds + Visible` each tick and populates the RenderQueue with their draw data (position, image, fill color, shape, layer, etc.).
 
-### `render(ctx, entities, camera?)`
+## Rendering Pipeline
 
-```js
-renderSystem.render(ctx, entities)
-renderSystem.render(ctx, entities, camera)
-```
+The full render pipeline works as follows:
 
-Renders all visible entities. Steps:
-1. Uses the provided camera, `Camera.main`, or identity (no transform) if none
-2. Derives view bounds from the camera for culling
-3. Applies the camera transform to the context
-4. Iterates entities, culling those outside the viewport
-5. Draws each entity via `_drawEntity`
+1. **RenderSystem.update()** — runs at priority 3. Clears the `RenderQueue` and repopulates it with all visible entities.
+2. **Scene.render(ctx)** — iterates views in order. For each active view:
+   - `view.prepare(ctx)` applies the camera transform (translate to center, scale by zoom, rotate)
+   - `queue.execute(ctx, view.config.layers)` draws all queued entities matching the view's layer mask
+   - `view.cleanup(ctx)` restores the canvas state
 
-### `renderOne(ctx, entity, camera?)`
+The Camera transform is owned by the View, not the RenderSystem:
 
 ```js
-renderSystem.renderOne(ctx, entity)
-renderSystem.renderOne(ctx, entity, camera)
-```
-
-Renders a single entity with the same camera/culling logic.
-
-## Camera Integration
-
-`RenderSystem` accepts a `Camera` instance instead of a generic viewport rect:
-
-```js
-const camera = new Camera(400, 300, 800, 600)
-renderSystem.render(ctx, allEntities, camera)
-renderSystem.renderOne(ctx, player, camera)
-```
-
-If no camera is provided, it falls back to `Camera.main`. If no camera exists at all, entities render without any viewport transform (identity).
-
-## Viewport Culling
-
-The system derives visible world bounds from the camera's position, zoom, and viewport size. Entities entirely outside these bounds are skipped. For rotated/scaled entities, a conservative bounding radius is used.
-
-## Drawing
-
-### `_drawEntity(ctx, entity)`
-
-Internal method that applies the entity's transform (translate, rotate, scale) and calls `entity.renderable.draw(ctx, collider.width, collider.height)`.
-
-## Default Singleton
-
-```js
-import { renderSystem, Camera } from 'jygame'
-
-const camera = new Camera(0, 0, 800, 600)
-Camera.setMain(camera)
-
-// RenderSystem uses Camera.main automatically
-renderSystem.render(ctx, allEntities)
-renderSystem.renderOne(ctx, player)
+class MyScene extends Scene {
+  onEnter() {
+    this.view.camera.lookAt(400, 300);
+    this.view.camera.zoom = 2;
+  }
+}
 ```
 
 ## Standalone Usage
 
+When using the engine Scene, the render pipeline runs automatically. For custom rendering outside a Scene:
+
 ```js
-import { renderSystem, Camera, Sprite } from 'jygame'
+import { World, DefaultWorldBuilder, RenderSystem, RenderQueue, AssetRegistry } from "jygame";
 
-const camera = new Camera(400, 300, 800, 600)
-camera.follow(player)
+const world = DefaultWorldBuilder.createDefault();
+world.setResource(RenderQueue, new RenderQueue());
+world.addSystem(RenderSystem);
 
-// Each frame
-ctx.clearRect(0, 0, 800, 600)
-renderSystem.render(ctx, allEntities, camera)
+// Each frame:
+world.update(dt);
+const queue = world.getResource(RenderQueue);
+queue.execute(ctx, 0xFF); // layer mask for all layers
 ```
