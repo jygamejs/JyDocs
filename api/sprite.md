@@ -76,7 +76,7 @@ set transform(v) {
 }
 ```
 
-The static `Sprite._defaultWorld` is used when no World is provided. The engine `Scene` sets `Sprite._defaultWorld` to the scene's World during `enter()` and restores it on `exit()`.
+The static `Sprite._defaultWorld` is used when no World is provided. The engine `Scene` sets `Sprite._defaultWorld` to the scene's World on scene activation and restores it on exit.
 
 ## Example
 
@@ -87,7 +87,7 @@ const player = new Sprite(100, 200, 32, 48)
 player.style.fill = '#63B44E'
 
 const scene = new Scene()
-scene.enter = function () {
+scene.onEnter = function () {
   // Sprite._defaultWorld is already set to this.world by engine Scene
 
   const move = new CompositeBinding(ActionKind.VECTOR2, [

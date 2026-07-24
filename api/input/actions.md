@@ -196,6 +196,6 @@ class GameScene extends Scene {
 }
 ```
 
-The scene's `InputContext` is automatically pushed on `enter()` and popped on `exit()`.
+The scene's `InputContext` is automatically pushed on `onEnter()` and popped on `onExit()`.
 
 See also: [InputSystem Overview](/api/input/input-system), [Gesture Recognition](/api/input/gestures), [Input Events & Backends](/api/input/events).

@@ -345,7 +345,7 @@ Input contexts are evaluated by priority. Higher-priority contexts can block low
 stack.push(new InputContext("pause", pauseMap, { priority: 100, consumePolicy: "block" }));
 ```
 
-The engine Scene automatically creates an `InputContext`, pushes it on `enter()`, and pops it on `exit()`.
+The engine Scene automatically creates an `InputContext`, pushes it on `onEnter()`, and pops it on `onExit()`.
 
 ### Coordinate System
 

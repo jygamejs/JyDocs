@@ -406,11 +406,11 @@ renderUI() {
 The HUD strip is hidden during Menu and Difficulty scenes and shown only when the GameScene is active:
 
 ```js
-// In GameScene.enter():
+// In GameScene.onEnter():
 const strip = document.getElementById("hud-strip");
 if (strip) strip.style.display = "";
 
-// In MenuScene.enter() / DifficultyScene.enter():
+// In MenuScene.onEnter() / DifficultyScene.onEnter():
 const strip = document.getElementById("hud-strip");
 if (strip) strip.style.display = "none";
 ```
@@ -476,7 +476,7 @@ export function saveStageProgress(index) {
 Direction and action input are polled via `Input.justPressed()` inside `update()` each frame. Navigation (Escape) uses a document-level keydown listener registered through `this.on()`. Swipe and tap are handled via `this.onSwipe()` and `this.onTap()`.
 
 ```js
-// In GameScene.enter():
+// In GameScene.onEnter():
 
 // Prevent arrows/space from scrolling the page
 this.on(document, "keydown", (e) => {

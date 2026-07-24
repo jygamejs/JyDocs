@@ -51,7 +51,7 @@ The `CoordinateSystem` is created by `Game` and accessible via `game.inputSystem
 
 ## Camera Integration
 
-The `CoordinateSystem` uses the active scene's camera for world/viewport transforms. This is wired automatically in `Scene.enter()`:
+The `CoordinateSystem` uses the active scene's camera for world/viewport transforms. This is wired automatically in `Scene.onEnter()`:
 
 ```js
 // Inside core/Scene.js enter():

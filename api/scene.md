@@ -19,22 +19,22 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `scene.world` | `World` | | The scene's ECS World (lazily created) |
-| `scene.view` | `View` | `null` | Default View (created on `enter()`). Contains `view.camera`, `view.viewport`, `view.config` |
+| `scene.view` | `View` | `null` | Default View (created on `onEnter()`). Contains `view.camera`, `view.viewport`, `view.config` |
 | `scene.views` | `View[]` | `[]` | All views (including the default). Sort by `view.order` for render order |
 | `scene.blocksUpdateBelow` | `boolean` | `true` | Pause `update()` on scenes below |
 | `scene.blocksRenderBelow` | `boolean` | `false` | Skip `render()` on scenes below |
 | `scene._actionMap` | `ActionMap` | (internal) | Scene-specific action bindings for the InputSystem |
 | `scene._inputPriority` | `number` | `0` | Input context priority for this scene |
-| `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `enter()`, popped on `exit()` |
+| `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `onEnter()`, popped on `onExit()` |
 
-The scene's `world` is lazily initialized on first access. During `enter()`, the engine Scene:
+The scene's `world` is lazily initialized on first access. During scene activation (`onEnter()`), the engine Scene:
 1. Creates a default `View` (accessible via `scene.view`) with a `Camera`
 2. Sets `world` resources: `CanvasContext` (canvas 2D context), `Camera` (from the default View)
 3. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
 4. Creates an `InputContext` for the scene, registers it with `game.inputSystem.contextStack`
 5. Wires the scene's camera into `game.inputSystem.coordinateSystem.camera`
 
-On `exit()`:
+On `onExit()`:
 1. Pops the scene's `InputContext` from the context stack
 2. Runs all cleanup functions (event listeners, etc.)
 3. Restores `Sprite._defaultWorld`
@@ -43,12 +43,12 @@ On `exit()`:
 
 ## Lifecycle Hooks
 
-All hooks are no-ops by default. Scenes throw if `enter()` or `exit()` is called more than once.
+All hooks are no-ops by default. Override `onEnter()` and `onExit()` rather than the internal `enter()`/`exit()` methods.
 
 | Hook | Signature | Called When |
 |------|-----------|-------------|
-| `enter()` | `enter()` | Scene becomes active |
-| `exit()` | `exit()` | Scene is exited — runs all cleanup functions |
+| `onEnter()` | `onEnter()` | Scene becomes active — setup here |
+| `onExit()` | `onExit()` | Scene is exited — teardown here |
 | `pause()` | `pause()` | Scene is paused by a scene pushed on top |
 | `resume()` | `resume()` | Scene is resumed after the scene above is popped |
 | `update(dt)` | `update(dt)` | Each fixed timestep tick — `world.update(dt)` is called by the engine |
@@ -61,7 +61,7 @@ import { KeyBinding, ChordBinding, CompositeBinding, ActionKind, KeyCode } from 
 
 const scene = new Scene()
 
-scene.enter = function () {
+scene.onEnter = function () {
   const world = this.world
   this.player = world.createEntity()
   world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
@@ -137,7 +137,7 @@ scene.renderUI = function () {
 
 ## View Management
 
-The scene owns a list of `View` objects. Each view has a `Camera`, `Viewport`, and `RenderConfig`. The default view is created automatically on `enter()`.
+The scene owns a list of `View` objects. Each view has a `Camera`, `Viewport`, and `RenderConfig`. The default view is created automatically on `onEnter()`.
 
 ```js
 // Access the default view and its camera
@@ -180,7 +180,7 @@ this.addView(minimap);
 | `cleanup(fn)` | Manually push to cleanup stack |
 
 ```js
-scene.enter = function () {
+scene.onEnter = function () {
   this.on(document, 'keydown', this.handleKey)
 }
 ```

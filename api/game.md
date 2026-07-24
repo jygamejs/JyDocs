@@ -44,7 +44,7 @@ The game manages a **stack of scenes**. The top scene receives events; scenes be
 
 ### `run(scene)`
 
-Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls `scene.enter()`, and begins the loop.
+Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls the scene lifecycle (which invokes `onEnter()`), and begins the loop.
 
 ```js
 game.run(new MenuScene())
@@ -148,7 +148,7 @@ As in v0.4.0: CSS `transform`-based scaling via `scaleToFit` option.
 const game = new Game({ width: 800, height: 600 })
 
 class MenuScene extends Scene {
-  enter() {
+  onEnter() {
     this.on(document, 'keydown', (e) => {
       if (e.key === 'Enter') game.pushScene(new GameScene())
     })
@@ -160,7 +160,7 @@ class MenuScene extends Scene {
 }
 
 class GameScene extends Scene {
-  enter() {
+  onEnter() {
     this.player = new Sprite(100, 100, 32, 32)
   }
   update(dt) {
