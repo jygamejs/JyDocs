@@ -1,26 +1,18 @@
 # Camera
 
-The `Camera` defines the visible region of the world. It controls position, zoom, and rotation, and is applied by the `RenderSystem` before drawing entities. The first camera created automatically becomes `Camera.main`, used as the default by `RenderSystem`.
-
-## Static Properties & Methods
-
-| Member | Description |
-|--------|-------------|
-| `Camera.main` | The default camera instance (set automatically on creation, or manually via `setMain`) |
-| `Camera.setMain(camera)` | Explicitly set a camera as the main/default |
+The `Camera` defines the visible region of the world. It controls position, zoom, and rotation. The engine `Scene` creates a default `View` with a Camera — access it via `scene.view.camera`.
 
 ## Constructor
 
 ```js
-const camera = new Camera(x, y, width, height)
+const camera = new Camera(x, y, zoom)
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `x` | `number` | `0` | Center X in world space |
 | `y` | `number` | `0` | Center Y in world space |
-| `width` | `number` | `0` | Viewport width in pixels |
-| `height` | `number` | `0` | Viewport height in pixels |
+| `zoom` | `number` | `1` | Scale factor (`1` = 100%, `2` = 2× zoomed in) |
 
 ## Properties
 
@@ -28,77 +20,79 @@ const camera = new Camera(x, y, width, height)
 |----------|------|---------|-------------|
 | `x` | `number` | `0` | Center X in world space |
 | `y` | `number` | `0` | Center Y in world space |
-| `width` | `number` | `0` | Viewport width in pixels |
-| `height` | `number` | `0` | Viewport height in pixels |
-| `zoom` | `number` | `1` | Scale factor (higher = zoomed in) |
+| `zoom` | `number` | `1` | Scale factor |
 | `rotation` | `number` | `0` | World rotation in radians (get/set with cached cos/sin) |
+| `target` | `object` or `null` | `null` | If set, camera syncs position to `target.x` / `target.y` each frame |
 
 ## Methods
 
-### `apply(ctx)`
+### `lookAt(x, y)`
 
 ```js
-camera.apply(ctx)
+camera.lookAt(400, 300)
 ```
 
-Applies the camera transform to the canvas context (translate to center, scale by zoom, rotate by -rotation, translate by -position). Called by `RenderSystem` automatically.
+Moves camera to look at a world point (sets `x` and `y`).
 
-### `follow(entity)`
+### `translate(dx, dy)`
 
 ```js
-camera.follow(entity)
+camera.translate(10, 0)  // pan right by 10px
 ```
 
-Sets `camera.x` and `camera.y` to `entity.transform.x` and `entity.transform.y`. Useful for tracking the player.
+Offsets the camera position.
 
-### `worldToScreen(wx, wy, out)`
+### `rotate(rad)`
 
 ```js
-camera.worldToScreen(worldX, worldY, out)  // returns out
+camera.rotate(0.1)  // rotate by 0.1 radians
 ```
 
-Converts world coordinates to screen pixel coordinates. Writes result into `out` (`{ x, y }`). **`out` is required** — the method does not allocate a new object.
+Adds to the current rotation.
 
-### `screenToWorld(sx, sy, out)`
+### `apply(ctx, vx, vy, vw, vh)`
 
 ```js
-camera.screenToWorld(screenX, screenY, out)  // returns out
+camera.apply(ctx, 0, 0, 800, 600)
 ```
 
-Converts screen pixel coordinates to world coordinates. Writes result into `out` (`{ x, y }`). **`out` is required** — the method does not allocate a new object.
+Applies the camera transform to a canvas context. Translates to viewport center, scales by zoom, rotates by `-rotation`, then translates by `-x, -y`. Typically called automatically by `View.prepare()`.
 
-### `project(x, y)`
+### `clone()`
 
 ```js
-const screenPt = camera.project(worldX, worldY)  // { x, y }
+const copy = camera.clone()
 ```
 
-Allocating convenience wrapper around `worldToScreen()`. Returns a new `{ x, y }` object.
+Returns a new `Camera` with the same position, zoom, and rotation.
 
-### `unproject(x, y)`
+### `copy(other)`
 
 ```js
-const worldPt = camera.unproject(screenX, screenY)  // { x, y }
+camera.copy(otherCamera)
 ```
 
-Allocating convenience wrapper around `screenToWorld()`. Returns a new `{ x, y }` object.
+Copies all fields (position, zoom, rotation, target) from another camera.
 
 ## Usage
 
+The engine Scene sets up a default View with a Camera automatically. Access and modify it through `scene.view`:
+
 ```js
-import { Camera, Game, Scene, Sprite } from 'jygame'
+import { Game, Scene } from "jygame";
 
-const game = new Game({ width: 800, height: 600 })
-const camera = new Camera(400, 300, 800, 600)  // becomes Camera.main automatically
-const player = new Sprite(0, 0, 32, 32)
+class MyScene extends Scene {
+  onEnter() {
+    // Default camera is at (0, 0) with zoom = 1
+    this.view.camera.lookAt(400, 300);
+    this.view.camera.zoom = 2;
+  }
 
-const scene = new Scene()
-scene.update = function (dt) {
-  camera.follow(player)
-}
-
-scene.render = function (ctx) {
-  // RenderSystem uses Camera.main automatically
-  renderSystem.render(ctx, allEntities)
+  update(dt) {
+    // Track a target
+    this.view.camera.target = this.player;
+  }
 }
 ```
+
+For coordinate conversion (screen ↔ world), use `this.view.screenToWorld()` / `this.view.worldToScreen()`, or the `InputSystem` coordinate system via `game.inputSystem.coordinateSystem`.

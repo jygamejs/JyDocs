@@ -2,332 +2,339 @@
 
 ## Architecture
 
-Jygame uses a pure **archetype-based Entity-Component-System (ECS)** model.
-
-- **Entities** are packed 32-bit integer IDs (`(generation << 24) | slot`)
-- **Components** are classes with typed schemas (e.g., `Transform { x: f32, y: f32 }`)
-- **Systems** extend `System` with static `query` and `priority`
-- **World** is the central orchestrator — owns entities, components, tables, queries, systems, and resources
-
-Entities are grouped into **archetypes** — unique sets of component IDs. Each archetype has a dense table of typed arrays (one column per component field). When you add or remove a component, the entity moves to a different archetype.
+Jygame is a **game engine** built around a Scene-based game loop with an underlying Entity-Component-System (ECS) architecture. Most of the time you'll work with high-level APIs — `Scene`, `Sprite`, `Game`, `Camera`, `View` — while the ECS handles performance-critical entity processing behind the scenes.
 
 ```
-Archetype [Transform, Velocity]
-┌─────────┬──────────┬──────────┐
-│ entity  │ Transform│ Velocity │
-│ (Uint32)│ x,y,...  │ x,y      │
-├─────────┼──────────┼──────────┤
-│   1     │ 100,200  │ 0,0      │
-│   2     │ 300,400  │ -5,10    │
-└─────────┴──────────┴──────────┘
+Game ── runs ──► Scene Stack
+                  │
+                  ├─ owns World (ECS) ── processes Sprite entities
+                  ├─ owns View(s) ── each has Camera + Viewport
+                  └─ owns InputContext ── action bindings
 ```
 
-## World
+## Game & Game Loop
 
-The `World` is the central hub. Each engine `Scene` creates its own World via `DefaultWorldBuilder.createDefault()`.
+`Game` is the top-level entry point. It creates the canvas, manages the scene stack, and drives the game loop at a **fixed timestep**.
 
 ```js
-import { DefaultWorldBuilder } from 'jygame'
+import { Game, Scene } from "jygame";
 
-const world = DefaultWorldBuilder.createDefault()
-world.update(dt) // runs all systems in priority order
-```
+const game = new Game({ width: 800, height: 600 });
 
-## Entities
-
-```js
-const entity = world.createEntity()
-world.destroyEntity(entity)
-world.isAlive(entity) // boolean
-```
-
-## Components
-
-Components are classes with a static typed schema:
-
-```js
-import { Transform, Velocity } from 'jygame'
-
-world.addComponent(entity, Transform)
-world.setComponent(entity, Transform, { x: 100, y: 200 })
-world.getComponent(entity, Transform) // live view with getters/setters
-world.hasComponent(entity, Velocity)  // boolean
-world.removeComponent(entity, Velocity)
-```
-
-Shorter aliases:
-
-```js
-world.add(entity, Transform)
-world.set(entity, Transform, { x: 100 })
-world.get(entity, Transform)
-world.has(entity, Velocity)
-world.remove(entity, Velocity)
-```
-
-### Batch Operations
-
-```js
-world.addMany(entity, Transform, Velocity, Renderable)
-world.removeMany(entity, Velocity)
-world.clear(entity)   // remove all components
-world.clone(entity)   // deep copy
-```
-
-### Builder Pattern
-
-```js
-const entity = world
-  .entity()
-  .with(Transform, { x: 100, y: 200 })
-  .with(Velocity)
-  .with(Renderable, { fillColor: 0xFF0000FF })
-  .create()
-```
-
-## Systems
-
-Systems extend `System` with a static `query` and `priority`:
-
-```js
-import { System } from 'jygame'
-
-class GravitySystem extends System {
-  static query = { all: [Transform, Velocity] }
-  static priority = 0
-
-  update(ctx, dt) {
-    const vy = ctx.column(Velocity, 'y')
-    for (let r = 0; r < ctx.entityCount; r++) {
-      vy[r] += 500 * dt // gravity
-    }
-  }
-}
-```
-
-Built-in systems with their priorities:
-
-| System | Priority | Query | Description |
-|--------|----------|-------|-------------|
-| `MovementSystem` | 0 | `[Transform, Velocity]` | `pos += vel * dt` |
-| `AnimationSystem` | 1 | `[Animation, Renderable]` | Frame advancement |
-| `CollisionSystem` | 2 | `[Transform, Collider, Visible]` | Spatial hash rebuild |
-| `RenderSystem` | 3 | `[Transform, Renderable, RenderBounds, Visible]` | Batched canvas draw |
-| `TrailSystem` | 4 | `[Transform, Trail, Visible]` | Trail rendering |
-
-## Queries
-
-```js
-const enemies = world.query({ all: [Transform, EnemyTag] })
-const moving = world.query({ all: [Transform, Velocity], none: [StaticTag] })
-
-for (const entity of enemies.entities()) { ... }
-for (const table of moving.tables()) { ... }
-```
-
-## Resources
-
-Share singletons across systems:
-
-```js
-world.setResource(Camera, new Camera(0, 0, 800, 600))
-world.getResource(Camera)
-```
-
-## Game Loop
-
-Jygame uses a **fixed timestep** game loop driven by `requestAnimationFrame`.
-
-```js
-import { Game, Scene } from 'jygame'
-
-const game = new Game({ width: 800, height: 600, fps: 60 })
-
-const scene = new Scene()
+const scene = new Scene();
 scene.update = function (dt) {
   // dt is always 1/60 — deterministic updates
-  // world.update(dt) is called automatically by engine Scene
-}
+};
 scene.render = function (ctx) {
   // Draw everything here
-}
+};
 
-game.run(scene)
+game.run(scene);
 ```
 
-The loop:
+The loop runs in this order each frame:
 1. `requestAnimationFrame` fires — real time is measured
-2. Real delta is fed into an internal `Clock` accumulator
-3. For each accumulated fixed step, `scene.update(fixedDt)` is called (which calls `world.update(dt)`)
-4. After all updates, `scene.interpolate(alpha)` for smooth rendering
-5. `scene.render(ctx)` draws to the canvas
+2. Real delta feeds an internal accumulator
+3. For each accumulated fixed step: `scene.update(fixedDt)` (calls `world.update(dt)` automatically)
+4. `scene.interpolate(alpha)` for smooth rendering between steps
+5. `scene.render(ctx)` draws to canvas
 6. Input state is reset
 
-## Scenes & Scene Stack
+## Scene & Scene Stack
 
-Scenes organize your game into distinct states. They live on a **stack** managed by `Game`.
+Scenes organize your game into distinct states (menu, gameplay, pause, game over). They live on a **stack** managed by `Game`. Only the topmost scene receives updates by default.
 
 ### Lifecycle Hooks
 
-| Hook | Purpose |
-|------|---------|
-| `enter()` | Setup — called once when mounted |
-| `exit()` | Teardown — called once when unmounted |
-| `pause()` | Called when a scene is pushed on top |
-| `resume()` | Called when the scene above is popped |
-| `update(dt)` | Simulation each fixed timestep |
-| `interpolate(alpha)` | Smooth rendering between timesteps |
-| `render(ctx)` | Drawing each frame |
-| `renderUI()` | Returns HTML string for DOM overlay |
+| Hook | Called When |
+|------|-------------|
+| `onEnter()` | Scene becomes active — setup here |
+| `onExit()` | Scene is exited — teardown here |
+| `pause()` | Another scene is pushed on top |
+| `resume()` | The scene above is popped |
+| `update(dt)` | Each fixed timestep tick |
+| `render(ctx)` | Each frame — receives the canvas 2D context |
+| `renderUI()` | Returns an HTML string for the DOM overlay |
+
+```js
+import { Game, Scene, Sprite, KeyCode, KeyBinding, ActionKind } from "jygame";
+
+class GameScene extends Scene {
+  onEnter() {
+    this.player = new Sprite(100, 100, 32, 48);
+    this.player.style.fill = "#B0DE8E";
+
+    this._actionMap.bind("move", new KeyBinding(KeyCode.KEY_D));
+  }
+
+  update(dt) {
+    if (this._actionMap.getState("move").pressed) {
+      this.player.x += 200 * dt;
+    }
+  }
+
+  render(ctx) {
+    ctx.fillStyle = this.player.style.fill;
+    ctx.fillRect(this.player.x, this.player.y, 32, 48);
+  }
+}
+
+const game = new Game({ width: 800, height: 600 });
+game.run(new GameScene());
+```
 
 ### Stack Operations
 
 Scenes are **single-use** — create a new instance each time.
 
 ```js
-this.pushScene(new PauseScene())
-this.popScene()
-this.replaceScene(new GameOverScene())
-this.switchScene(new MenuScene())
+this.pushScene(new PauseScene());    // push on top (pauses below)
+this.popScene();                      // pop current, resume below
+this.replaceScene(new GameOverScene()); // replace current in-place
+this.switchScene(new MenuScene());    // reset entire stack
 ```
 
-### Blocking
+### Blocking Behaviour
 
-By default:
-- `blocksUpdateBelow = true` — scenes below are paused
-- `blocksRenderBelow = false` — all scenes render (bottom to top)
-
-### Event Cleanup
+| Property | Default | Description |
+|----------|---------|-------------|
+| `blocksUpdateBelow` | `true` | Pause `update()` on scenes below |
+| `blocksRenderBelow` | `false` | All scenes render bottom to top |
 
 ```js
-this.on(document, 'click', onClick)
-this.onSwipe(dir => this.move(dir))
-this.onTap(({ x, y }) => this.place(x, y))
+class PauseScene extends Scene {
+  constructor() {
+    super();
+    this.blocksUpdateBelow = true;
+    this.blocksRenderBelow = false;
+  }
+  renderUI() {
+    return '<div class="pause-overlay">PAUSED</div>';
+  }
+}
 ```
 
 ### DOM UI Layer
 
+Return HTML from `renderUI()` and it gets injected into the scene's DOM overlay:
+
 ```js
 scene.renderUI = function () {
-  return '<h1 id="score">Score: 0</h1>'
-}
+  return `<h1>Score: ${this.score}</h1>`;
+};
 ```
 
-## Sprite (Convenience Wrapper)
+### Event Listener Cleanup
 
-`Sprite` wraps an ECS entity for convenience. It creates the entity in a `World` and provides getter/setter access to its components:
+Auto-cleaned when the scene exits:
 
 ```js
-import { Sprite } from 'jygame'
-
-const player = new Sprite(100, 200, 32, 48)
-player.style.fill = '#B0DE8E'
-
-// Under the hood:
-player.world      // the World
-player.entity     // the entity ID
-player.transform  // live Transform view
-player.velocity   // live Velocity view
-player.collider   // live Collider view
+this.on(document, "click", onClick);       // DOM listener
+this.onSwipe(dir => this.move(dir));       // swipe gesture
+this.onTap(({ x, y }) => this.place(x, y)); // tap gesture
+this.cleanup(() => myTimer.stop());        // custom cleanup
 ```
 
-Sprites are processed by the same ECS systems — no manual system calls needed when using the engine Scene.
+## Sprite
+
+`Sprite` is the main way to create visible, movable objects. It wraps an ECS entity behind a simple getter/setter API.
+
+```js
+import { Sprite } from "jygame";
+
+const player = new Sprite(100, 200, 32, 48);
+player.style.fill = "#B0DE8E";
+player.x = 100;
+player.y = 200;
+player.velocity.x = 200;
+```
+
+When created inside a scene (or after the scene has entered), sprites are registered in the scene's default world and processed by all built-in systems — movement, animation, collision, and rendering happen automatically.
+
+### Animation
+
+Define animation clips and control playback through `sprite.animation`:
+
+```js
+import { AnimationClip } from "jygame";
+
+// Define clips
+player.animation.add("idle", new AnimationClip({
+  frames: [idleImg], fps: 1, loop: true,
+}));
+player.animation.add("walk", new AnimationClip({
+  frames: [walk1, walk2, walk3, walk4], fps: 12, loop: true,
+}));
+
+// Play — idempotent, does not reset if already playing
+player.animation.play("walk");
+
+// Switch to jump — resets to frame 0
+player.animation.play("jump");
+
+// Force restart even if already playing
+player.animation.restart("hurt");
+
+// Control
+player.animation.pause();
+player.animation.resume();
+player.animation.stop();
+```
+
+Use `play(name)` for switching between animations (it only resets when the name changes). Use `restart(name)` when you need to force an animation to replay from the beginning, like a "hurt" or "attack" that should restart even if already playing.
+
+For loading animations from spritesheets or atlases:
+
+```js
+import { AnimationPack } from "jygame";
+
+// From individual files
+const clips = await AnimationPack.load({ dir: "characters/player", fps: 12 });
+
+// From a spritesheet
+const clips = AnimationPack.fromSpriteSheet({
+  image: sheetImg,
+  frameWidth: 32, frameHeight: 48,
+  animations: {
+    idle: { row: 0, frames: 4 },
+    walk: { row: 1, frames: 6 },
+  },
+  fps: 12,
+});
+
+// From a texture atlas
+const clips = AnimationPack.fromJSONAtlas({
+  image: atlasImg,
+  json: atlasData,
+  animations: { idle: ["idle_0", "idle_1"], walk: ["walk_0", "walk_1"] },
+});
+
+// Register all clips at once
+player.animation.addAll(clips);
+player.animation.play("idle");
+```
 
 ## Group
 
-`Group` is an iterable container for sprites. It can be **query-backed** (read-only, populated by a `QueryView`) or **sprite-backed** (manually managed):
+`Group` is an iterable container for sprites.
 
 ```js
-// Sprite-backed
-const enemies = new Group()
-enemies.add(enemy1)
-enemies.add(enemy2)
+// Sprite-backed (mutable)
+const items = new Group();
+items.add(potion);
+items.forEach(s => s.x += 10);
 
-// Query-backed (read-only, auto-populated by query)
-const allEnemies = Group.query(world, { all: [Transform, EnemyTag] })
+// Query-backed (read-only, auto-populated by ECS query)
+const enemies = Group.query(world, { all: [Transform, EnemyTag] });
 ```
 
-## Camera
-
-The `Camera` defines the visible world region. The engine Scene sets one up automatically as a resource and wires it into the InputSystem's `CoordinateSystem` on `enter()`.
+### Collision Detection
 
 ```js
-import { Camera } from 'jygame'
+group.useSpatialHash(64); // enable for large groups
 
-const camera = new Camera(400, 300, 800, 600)
-camera.zoom = 2
-camera.follow(player)
-
-// Coordinate conversion (non-allocating, requires out param)
-const out = {}
-camera.screenToWorld(mouseX, mouseY, out)
-camera.worldToScreen(worldX, worldY, out)
-
-// Allocating convenience wrappers
-const screenPt = camera.project(worldX, worldY)   // → { x, y }
-const worldPt  = camera.unproject(screenX, screenY) // → { x, y }
+bullets.collideGroup(enemies, (bullet, enemy) => {
+  bullet.destroy();
+  enemy.health--;
+});
 ```
 
-The `CoordinateSystem` uses the scene's camera for the VIEWPORT ↔ WORLD transform. Input coordinates can be converted via:
+## Camera & Views
+
+The engine `Scene` creates a default `View` with a camera. Access and control it via `scene.view`:
 
 ```js
-const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
+class GameScene extends Scene {
+  onEnter() {
+    // Position the camera
+    this.view.camera.lookAt(400, 300);
+    this.view.camera.zoom = 2;
+  }
+
+  update(dt) {
+    // Track a sprite by setting the target
+    this.view.camera.target = this.player;
+  }
+}
+```
+
+### Camera API
+
+| Property/Method | Description |
+|----------------|-------------|
+| `camera.x`, `camera.y` | Center position in world space |
+| `camera.zoom` | Scale factor (`1` = normal, `2` = 2× zoomed in) |
+| `camera.rotation` | Rotation in radians |
+| `camera.target` | If set, camera follows `target.x` / `target.y` automatically |
+| `camera.lookAt(x, y)` | Move camera to a world point |
+| `camera.translate(dx, dy)` | Pan the camera |
+
+### Coordinate Conversion
+
+```js
+// Via the View
+const worldPt = this.view.screenToWorld(screenX, screenY);
+const screenPt = this.view.worldToScreen(worldX, worldY);
+
+// Via the InputSystem's CoordinateSystem
+const pt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
+```
+
+### Multiple Views
+
+For split-screen, minimaps, or different render layers, add additional views:
+
+```js
+import { View } from "jygame";
+
+const minimap = new View({
+  viewport: new Viewport(600, 10, 180, 180),
+  camera: new Camera(400, 300, 0.25),
+  config: new RenderConfig({ clearColor: "#222", layers: Layer.ENTITIES }),
+  order: 1,
+});
+
+scene.addView(minimap);
 ```
 
 ## Input System
 
-The `InputSystem` is an event-driven, device-oriented input architecture with a layered pipeline:
-
-```
-DOM Events → Backend → InputEventQueue → Devices → ContextStack → Action States
-```
-
-### Setup
-
-`InputSystem` is created automatically by `Game` and accessible via `game.inputSystem`:
-
-```js
-const system = game.inputSystem;
-// system.backend      → BrowserBackend
-// system.devices      → DeviceRegistry
-// system.contextStack → ContextStack
-// system.coordinateSystem → CoordinateSystem
-```
+The `InputSystem` is the engine's input layer — created automatically by `Game` and accessible via `game.inputSystem`. It provides device polling and an action-based abstraction over raw input.
 
 ### Devices
 
-Devices consume events from the shared queue and expose typed state:
-
-| Device | Purpose |
-|--------|---------|
-| `Keyboard` | Key state queries (`isDown`, `justPressed`, `justReleased`, `modifiers`) |
-| `Mouse` | Button state, position, wheel, double-click |
-| `PointerManager` | Multi-touch pointer tracking with pressure, tilt, twist, velocity |
-| `GestureEngine` | Gesture recognition (tap, swipe, pinch, rotate, etc.) |
-| `TextInput` | IME composition and printable character input |
-
 ```js
 const kb = game.inputSystem.devices.get(Keyboard);
-if (kb.justPressed(KeyCode.SPACE)) player.jump();
+if (kb.isDown(KeyCode.SPACE)) player.jump();
+if (kb.justPressed(KeyCode.KEY_E)) player.interact();
 ```
+
+| Device | Input Types |
+|--------|-------------|
+| `Keyboard` | Key state: `isDown`, `justPressed`, `justReleased`, `modifiers` |
+| `Mouse` | Button state, position, wheel, double-click |
+| `PointerManager` | Multi-touch tracking with pressure, tilt, velocity |
+| `GestureEngine` | Gesture recognition (tap, swipe, pinch, rotate) |
 
 ### Action System
 
-Abstract game actions (e.g., "move", "jump") are mapped to bindings via `ActionMap`:
+Bind abstract game actions to input using `ActionMap`. Bindings are only active while the scene is on the scene stack:
 
 ```js
 this._actionMap.bind("move", new CompositeBinding(ActionKind.VECTOR2, [
-  { vector: [-1, 0], binding: new KeyBinding(KeyCode.KEY_A) },
-  { vector: [1, 0],  binding: new KeyBinding(KeyCode.KEY_D) },
+  { binding: new KeyBinding(KeyCode.KEY_D), vector: [1, 0] },
+  { binding: new KeyBinding(KeyCode.KEY_A), vector: [-1, 0] },
 ]));
-```
+this._actionMap.bind("jump", new KeyBinding(KeyCode.SPACE));
 
-Action states provide `pressed`, `justPressed`, `justReleased`, `strength`, and `vector`:
-
-```js
+// Read state
 const move = this._actionMap.getState("move");
-player.vel.x = move.vector.x * speed;
+const jump = this._actionMap.getState("jump");
+player.x += move.vector.x * speed;
+if (jump.justPressed) player.y -= 100;
 ```
+
+Action states expose: `pressed`, `justPressed`, `justReleased`, `strength`, `vector`.
 
 ### Context Stack
 
@@ -338,22 +345,7 @@ Input contexts are evaluated by priority. Higher-priority contexts can block low
 stack.push(new InputContext("pause", pauseMap, { priority: 100, consumePolicy: "block" }));
 ```
 
-The engine `Scene` automatically creates an `InputContext`, pushes it on `enter()`, and pops it on `exit()`. Bind actions in `onCreate()` or `enter()` using `this._actionMap`.
-
-### Gestures
-
-Gesture recognition is integrated into the device system:
-
-```js
-const ge = game.inputSystem.devices.get(GestureEngine);
-if (ge.last(GestureType.SWIPE)) { /* handle swipe */ }
-```
-
-Or via `GestureBinding` within the action system:
-
-```js
-this._actionMap.bind("pinch", new GestureBinding(GestureType.PINCH));
-```
+The engine Scene automatically creates an `InputContext`, pushes it on `enter()`, and pops it on `exit()`.
 
 ### Coordinate System
 
@@ -370,8 +362,6 @@ The `CoordinateSystem` transforms between four spaces:
 const worldPt = game.inputSystem.coordinateSystem.toWorld({ x: 100, y: 200 });
 ```
 
-The camera is wired automatically in `Scene.enter()`.
-
 ### See Also
 
 - [InputSystem](/api/input/input-system) — full API reference
@@ -380,17 +370,93 @@ The camera is wired automatically in `Scene.enter()`.
 - [Gestures](/api/input/gestures) — gesture recognition
 - [Coordinate System](/api/input/coordinate-system) — space transforms
 
+## Particles
+
+The particle system uses a **backend architecture** — a `ParticleSystem` manages simulation and rendering, `ParticleEmitter` controls emission with shape-based spawning, and **modifiers** control particle behaviour over time.
+
+See [Getting Started → Particles](/guide/getting-started#particles) for full examples with fire and explosion effects.
+
+```js
+const ps = new ParticleSystem({
+  backend: new GpuParticleBackend({
+    storage: new SoAParticleStorage({ capacity: 1000 }),
+    renderer: new CanvasParticleRenderer({ renderParticle: ... }),
+  }),
+});
+ps.addModifier(new VelocityModifier({ drag: 0.3 }));
+ps.addModifier(new ColorModifier({ from: "#ffcc00", to: "#ff2200" }));
+
+const emitter = new ParticleEmitter({
+  system: ps, rate: 120,
+  shape: new ConeShape({ radius: 15, angle: Math.PI / 3, speed: [120, 200] }),
+});
+emitter.setPosition(400, 500);
+emitter.start();
+```
+
+## Audio
+
+The engine provides `AudioManager` for sound effects and music. Define sounds with `audio.define()`, load files with `AudioLoader`, then play them.
+
+```js
+import { AudioManager, AudioLoader } from "jygame";
+
+const audio = new AudioManager();
+audio.define("jump", { source: "sounds/jump.wav" });
+audio.define("bgm", { source: "sounds/bg.ogg", group: "music", loop: true });
+
+await AudioLoader.load("sounds/jump.wav");
+await AudioLoader.load("sounds/bg.ogg");
+
+audio.play("jump");
+
+const music = audio.music("bgm");
+music.volume = 0.5;
+music.play();
+music.fadeIn(2);
+
+// Call audio.update(dt) each frame for fade/transition advancement
+```
+
+## Asset Loading
+
+Load images, fonts, and audio with progress tracking:
+
+```js
+import { ImageLoader, FontLoader, LoadingTask } from "jygame";
+
+// Images
+const img = await ImageLoader.load("player.png");
+const assets = await ImageLoader.loadAll({ player: "player.png", bg: "bg.png" });
+const cached = ImageLoader.get("player");
+
+// Fonts
+await FontLoader.load("PixelFont", "fonts/pixel.woff2");
+
+// Custom loading screen
+const task = ImageLoader.loadAll({ /* ... */ });
+task.onProgress((loaded, total) => updateBar(loaded / total));
+await task;
+```
+
+## Color System
+
+```js
+import { Color, Colors, Palettes } from "jygame";
+
+// Direct color lookup
+ctx.fillStyle = Color.CyberYellow;
+
+// Organized by family
+sprite.style.fill = Colors.GreenShades.MagicalMalachite;
+
+// Curated palettes
+const palette = Palettes.Terracotta; // array of { name, hex, family }
+```
+
 ## Debug & Diagnostics
 
-JyGame ships with a built-in debugging and diagnostics suite providing real-time performance metrics, an in-game overlay HUD, and a standalone workspace window.
-
-### Enabling
-
-Debug is enabled by default (`debug: true` in `Game` constructor). The diagnostics engine records timers, counters, and gauges each frame.
-
-### In-Game Overlay
-
-The overlay provides programmatic access with keyboard shortcuts for individual views and manual captures:
+Debug is enabled by default (`debug: true` in `Game`). Press `Ctrl+F3` to open the debug workspace, or toggle the in-game overlay:
 
 ```js
 game.debug.show();
@@ -398,412 +464,179 @@ game.debug.hide();
 game.debug.toggle();
 ```
 
-### Debug Workspace
-
-Press `Ctrl+F3` to open a standalone workspace window that receives real-time ECS world snapshots via `BroadcastChannel`.
-
-### Custom Metrics
-
-```js
-const mids = resolveMetricIds(diag, {
-  aiThink: { name: "game.ai.think", type: MetricType.TIMER, category: MetricCategory.USER },
-});
-diag.scope(mids.aiThink, () => { /* expensive logic */ });
-```
-
-### Triggers & Captures
-
-```js
-diag.addTrigger({
-  name: "Slow Frame",
-  metricName: "frame.total",
-  operator: ">",
-  threshold: 16.67,
-  preFrames: 10,
-  postFrames: 5,
-});
-```
-
-### See Also
-
-- [Getting Started](/api/debug/getting-started) — quick start guide
-- [Diagnostics Engine](/api/debug/diagnostics) — metrics, triggers, captures
-- [In-Game Overlay](/api/debug/overlay) — overlay views and shortcuts
-- [Debug Workspace](/api/debug/workspace) — standalone workspace
-- [World Snapshots](/api/debug/snapshots) — ECS snapshot system
+See [Debug & Diagnostics](/api/debug/getting-started) for custom metrics, triggers, and captures.
 
 ## Object Pooling
 
-Object pooling reuses short-lived objects to avoid garbage collection pressure. JyGame provides two pool types:
-
-### Pool (simple)
-
-A basic free-list pool for simple reuse. `acquire()` returns a recycled object or creates one; `release()` resets it and returns it to the free list. Objects beyond `maxSize` are discarded.
-
-```js
-const bulletPool = new Pool({
-  create: () => new Sprite(0, 0, 8, 8),
-  reset: (b) => { b.visible = false },
-  initialSize: 50,
-  maxSize: 200,
-})
-
-const b = bulletPool.acquire()
-bulletPool.release(b)
-```
-
-### ActivePool (with tracking)
-
-`ActivePool` extends the concept by tracking which objects are in use, providing O(1) acquire/release, iteration over active objects, batch operations, and peak-usage instrumentation. It is the preferred pool for most gameplay scenarios.
+Reuse short-lived objects to avoid GC pressure with `ActivePool`:
 
 ```js
 const bulletPool = new ActivePool({
   create: () => new Sprite(0, 0, 8, 8),
-  reset: (b) => { b.visible = false; b.velocity.set(0, 0) },
+  reset: (b) => { b.visible = false; },
   initialSize: 50,
   maxSize: 200,
-})
+});
 
-// Fire — acquire from pool
-function fire() {
-  const b = bulletPool.acquire()
-  b.transform.x = playerX
-  b.transform.y = playerY
-  b.velocity.set(0, -300)
-  b.visible = true
-}
-
-// Update frame — process and release
-function update(dt) {
-  bulletPool.updateActive(b => {
-    b.transform.y += b.velocity.y * dt
-    if (b.transform.y < -100) bulletPool.release(b)
-  })
-}
-
-// Render frame — draw active only
-function render(ctx) {
-  bulletPool.forEachActive(b => renderSystem.renderOne(ctx, b))
-}
+const b = bulletPool.acquire();
+bulletPool.release(b);
+bulletPool.forEachActive(b => b.update(dt));
 ```
 
-**Batch operations** help in scenes with many short-lived objects:
+---
+
+## ECS Architecture (Advanced)
+
+The engine is built on an **archetype-based Entity-Component-System (ECS)** model. You don't need to interact with it directly for most tasks — `Sprite`, `Scene`, and `Group` handle it for you — but understanding it helps when writing custom systems or optimizing performance.
+
+### World
+
+Each `Scene` owns a `World` — the central hub that manages entities, components, systems, queries, and resources.
 
 ```js
-// Spawn a wave
-const wave = bulletPool.acquireMany(20)
-// Release all bullets that went off-screen
-bulletPool.releaseInactive(b => b.transform.y < -100)
-// Clear everything at once
-bulletPool.clearActive()
+const world = scene.world; // created automatically by the Scene
+world.update(dt);           // runs all systems in priority order
 ```
 
-**Instrumentation** — Each pool records peak usage, letting you tune pool sizes:
+### Entities
 
-| Property | Purpose |
-|----------|---------|
-| `peakActive` | Highest concurrent objects — guide for `initialSize` |
-| `peakCapacity` | Total ever allocated — guide for `maxSize` |
-| `totalCreated` | Number of allocations — 0 means no GC pressure |
-
-## Prefabs
-
-Prefabs are reusable entity blueprints. You define the component set once and instantiate it many times with per-instance overrides. This avoids repetitive `addComponent` / `setComponent` boilerplate.
-
-### Defining a Prefab
+Entities are integer IDs. Create and destroy them through the World:
 
 ```js
-const bulletPrefab = world.createPrefab('bullet')
-  .add(Transform, { scaleX: 0.5, scaleY: 0.5 })
-  .add(Velocity)
-  .add(Renderable, { fillColor: 0xFFFF00FF })
-  .tag(ProjectileTag)
+const entity = world.createEntity();
+world.destroyEntity(entity);
+world.isAlive(entity); // boolean
 ```
 
-The builder chain supports `.add(Component, defaults?)` and `.tag(TagComponent)`. Components without defaults are added with zero-initialised values.
+### Components
 
-### Instantiating
-
-`instantiate(name, overrides)` creates a new entity with the prefab's components and merges the overrides:
+Components are classes with a static typed schema. Built-in components include `Transform`, `Velocity`, `Renderable`, `Visible`, `Collider`, `RenderBounds`, and `Animation`:
 
 ```js
-const bullet = world.instantiate('bullet', {
-  Transform: { x: playerX, y: playerY },
-  Velocity: { x: aimX * 500, y: aimY * 500 },
-})
+import { Transform, Velocity, Renderable } from "jygame";
+
+world.addComponent(entity, Transform);
+world.setComponent(entity, Transform, { x: 100, y: 200 });
+world.getComponent(entity, Transform); // live view with getters/setters
+world.hasComponent(entity, Velocity);  // boolean
+world.removeComponent(entity, Velocity);
+
+// Shorter aliases
+world.add(entity, Transform);
+world.set(entity, Transform, { x: 100 });
+world.get(entity, Transform);
 ```
 
-Override values are spread over the defaults — you only need to specify the fields that differ.
-
-### Use Cases
-
-- **Bullets** — same components, different positions/velocities
-- **Enemies** — shared component layout, varying stats per variant
-- **Pickups** — common Transform + Renderable + Collider, unique tags per type
-- **Particle effects** — instantiate a burst of short-lived entities from a single prefab
-
-## Events
-
-The ECS event system lets systems communicate without direct coupling. Events are stored in ring buffers and read once per frame, then cleared — perfect for one-shot notifications like collisions, spawn requests, and state changes.
-
-### Defining an Event
-
-Events are classes with a static `fields` array declaring the event's data shape:
+**Batch operations**:
 
 ```js
-class CollisionEvent { static fields = ['entityA', 'entityB', 'impulse'] }
-class ScoreEvent { static fields = ['amount', 'source'] }
-class SpawnEvent { static fields = ['prefab', 'x', 'y'] }
-
-world.registerEvent(CollisionEvent)
-world.registerEvent(ScoreEvent)
+world.addMany(entity, Transform, Velocity, Renderable);
+world.removeMany(entity, Velocity);
+world.clear(entity);   // remove all components
+world.clone(entity);   // deep copy
 ```
 
-### Emitting
-
-Events can be emitted from anywhere — systems, the scene update, or even other event handlers:
+**Builder pattern**:
 
 ```js
-world.events.emit(CollisionEvent, {
-  entityA: player,
-  entityB: enemy,
-  impulse: magnitude,
-})
+const entity = world
+  .entity()
+  .with(Transform, { x: 100, y: 200 })
+  .with(Velocity)
+  .with(Renderable, { fillColor: 0xFF0000FF })
+  .create();
 ```
 
-### Reading
+### Systems
 
-Event consumers read in a for-of loop. Events are available only until the end of the current frame:
+Systems process entities matching a component query. Built-in systems are registered automatically by `DefaultWorldBuilder`:
+
+| System | Priority | Query | Description |
+|--------|----------|-------|-------------|
+| `MovementSystem` | 0 | `[Transform, Velocity]` | `pos += vel * dt` |
+| `AnimationSystem` | 1 | `[Animation, Renderable]` | Frame advancement |
+| `CollisionSystem` | 2 | `[Transform, Collider, Visible]` | Spatial hash rebuild |
+| `RenderSystem` | 3 | `[Transform, Renderable, RenderBounds, Visible]` | Batched canvas draw |
+
+To write a custom system:
 
 ```js
-class DamageSystem extends System {
-  static query = { all: [Health, Transform] }
-  static priority = 5
+import { System } from "jygame";
+
+class GravitySystem extends System {
+  static query = { all: [Transform, Velocity] };
+  static priority = 0;
 
   update(ctx, dt) {
-    for (const evt of world.events.read(CollisionEvent)) {
-      if (ctx.hasEntity(evt.entityA)) {
-        this.applyDamage(ctx, evt.entityA, 10)
-      }
+    const vy = ctx.column(Velocity, "y");
+    for (let r = 0; r < ctx.entityCount; r++) {
+      vy[r] += 500 * dt;
     }
   }
 }
+
+world.addSystem(GravitySystem);
 ```
 
-### Event Lifecycle
+### Queries
 
-1. Events are emitted into a ring buffer (pre-allocated, no allocation on emit)
-2. All systems run their `update` — any system can call `events.read()`
-3. At the end of the frame, all event buffers are cleared
-4. Events emitted during a system update are visible to higher-priority systems in the same frame
-
-### Use Cases
-
-- **Collision responses** — CollisionSystem emits, DamageSystem / SoundSystem consume
-- **Score changes** — emit on enemy death, HUD system reads and updates UI
-- **Spawn requests** — emit from burst systems, SpawnSystem instantiates prefabs
-- **State transitions** — emit when a boss phase changes, other systems react
-
-## Hierarchy
-
-Entity hierarchies let you attach children to a parent so that transformations, visibility, and lifecycle propagate. The `HierarchySystem` (included in the default world) recursively computes world-space transforms from local transforms each frame.
-
-### Setup
-
-`initHierarchy()` registers the hierarchy component and the `HierarchySystem`:
+Find entities matching a component set:
 
 ```js
-world.initHierarchy()  // called automatically by DefaultWorldBuilder
+const enemies = world.query({ all: [Transform, EnemyTag] });
+for (const entity of enemies.entities()) { /* ... */ }
 ```
 
-### Attaching & Detaching
+### Resources
+
+Share singletons across systems:
 
 ```js
-// Attach — child moves with the parent
-world.attach(child, parent)
-
-// Detach — child becomes a root entity
-world.detach(child)
-
-// Query
-world.parentOf(entity)    // entity ID or null
-world.childrenOf(entity)  // iterable of entity IDs
+world.setResource(MyData, new MyData());
+world.getResource(MyData);
 ```
 
-### How It Works
+### Prefabs
 
-Each entity with a parent stores its **local** transform (relative to the parent). The `HierarchySystem` runs each frame and computes the **world** transform by walking the tree and multiplying local transforms. This means:
-
-- Moving the parent moves all children
-- Rotating the parent rotates children around the parent's origin
-- Destroying the parent optionally destroys children
-
-### Use Cases
-
-- **Player with attached weapon** — weapon follows the player's position and rotation
-- **Vehicle with riders** — riders move with the vehicle
-- **UI elements** — panels, buttons, labels that group together
-- **Compound entities** — a multi-sprite boss assembled from child entities
+Reusable entity blueprints:
 
 ```js
-// Create a simple vehicle hierarchy
-const vehicle = world.createEntity()
-world.add(vehicle, Transform, { x: 100, y: 200 })
+world.createPrefab("bullet")
+  .add(Transform, { scaleX: 0.5 })
+  .add(Velocity)
+  .add(Renderable, { fillColor: 0xFFFF00FF })
+  .tag(ProjectileTag);
 
-const turret = world.createEntity()
-world.add(turret, Transform)
-world.attach(turret, vehicle)
-
-const barrel = world.createEntity()
-world.add(barrel, Transform)
-world.attach(barrel, turret)
-
-// Moving vehicle moves turret and barrel automatically
-world.set(vehicle, Transform, { x: 300, y: 400 })
+const bullet = world.instantiate("bullet", {
+  Transform: { x: playerX, y: playerY },
+  Velocity: { x: aimX * 500, y: aimY * 500 },
+});
 ```
 
-## Asset Loading
+### Events
 
-JyGame provides static loaders for images, fonts, and audio. All return promises or `LoadingTask` objects with progress tracking — ideal for loading screens and asset preloading.
-
-### ImageLoader
-
-Loads `HTMLImageElement` instances with optional `img.decode()` for jank-free first paint:
+ECS events let systems communicate without direct coupling:
 
 ```js
-import { ImageLoader } from 'jygame'
+class CollisionEvent { static fields = ["entityA", "entityB"]; }
+world.registerEvent(CollisionEvent);
 
-// Single image
-const img = await ImageLoader.load('player.png')
+// Emit
+world.events.emit(CollisionEvent, { entityA: player, entityB: enemy });
 
-// Batch — returns a LoadingTask with progress tracking
-const task = ImageLoader.loadAll({
-  player: 'player.png',
-  enemy: 'enemy.png',
-  bullet: 'bullet.png',
-  bg: 'background.png',
-})
-
-task.onProgress((loaded, total) => {
-  progressBar.value = loaded / total
-})
-
-const assets = await task
-// assets.player, assets.enemy, etc.
+// Read (in a system update)
+for (const evt of world.events.read(CollisionEvent)) { /* ... */ }
 ```
 
-Cached images are retrievable anywhere via `ImageLoader.get('player')`.
+### Hierarchy
 
-### FontLoader
-
-Uses the `FontFace` API to load web fonts before rendering text:
+Parent-child relationships for sprites/entities:
 
 ```js
-await FontLoader.load('PixelFont', 'fonts/pixel.woff2')
-
-const task = FontLoader.loadAll({
-  Pixel: 'fonts/pixel.woff2',
-  Retro: 'fonts/retro.ttf',
-})
-task.onProgress((l, t) => console.log(`Fonts: ${l}/${t}`))
-await task
-
-// Safe to render text now
-ctx.font = '24px Pixel'
+world.attach(child, parent);
+world.detach(child);
+world.parentOf(entity);   // entity ID or null
+world.childrenOf(entity); // iterable
 ```
 
-### AudioLoader
-
-Loads audio for either `HtmlAudioBackend` or `WebAudioBackend`:
-
-```js
-// For HTML Audio backend
-await AudioLoader.load('sounds/click.mp3')
-
-// For Web Audio backend
-const ctx = new AudioContext()
-await AudioLoader.loadBuffer('sounds/music.wav', ctx)
-
-// Batch
-const task = AudioLoader.loadAll({
-  click: 'sounds/click.mp3',
-  hit: 'sounds/hit.mp3',
-})
-```
-
-### LoadingTask
-
-The `LoadingTask` object returned by batch `loadAll` methods is thenable (`await`-compatible) and provides `onProgress(cb)` for building loading screens, plus `expect(n)`, `done()`, and `fail(err)` for custom loading scenarios.
-
-### Loading Screen Pattern
-
-```js
-async function loadGame() {
-  const task = ImageLoader.loadAll({ ... })
-  task.onProgress((loaded, total) => {
-    updateLoadingBar(loaded / total)
-  })
-  await task
-
-  await FontLoader.loadAll({ ... })
-  startGame()
-}
-```
-
-## Color System
-
-JyGame includes 458 named colors and 96 handpicked palettes, all importable from `Color`, `Colors`, and `Palettes`.
-
-### Color (flat lookup)
-
-Every named color is a property on the `Color` object — fast direct access by name:
-
-```js
-import { Color } from 'jygame'
-
-sprite.style.fill = Color.CyberYellow     // '#ffd400'
-sprite.style.fill = Color.NeonRose         // '#ff0080'
-ctx.fillStyle      = Color.VampireFangs    // '#cb2957'
-```
-
-### Colors (organized by family)
-
-`Colors` groups colors into families (`Red`, `Orange`, `Yellow`, `Green`, `Teal`, `Blue`, `Purple`, `Pink`, `Brown`, `Grey`, `Black`, `White`), each with a primary color and named shades:
-
-```js
-import { Colors } from 'jygame'
-
-// Family primary
-ctx.fillStyle = Colors.Green          // '#d6fb61'
-
-// Specific shade
-sprite.style.fill = Colors.GreenShades.MagicalMalachite  // '#00c68d'
-sprite.style.fill = Colors.BlueShades.FrostedBlueberries // '#6c6eb2'
-```
-
-This makes it easy to iterate by hue — pick a family, then browse its shades for matching tones.
-
-### Palettes (curated combinations)
-
-`Palettes` contains handpicked color combinations that work well together. Each palette is an array of `{ name, hex, family }` objects:
-
-```js
-import { Palettes } from 'jygame'
-
-const sunset = Palettes.Terracotta
-// [
-//   { name: 'TigersEye',     hex: '#DE9440', family: 'yellow' },
-//   { name: 'JapaneseCramine', hex: '#99262B', family: 'red' },
-//   { name: 'RoseTaupe',     hex: '#8D635A', family: 'rose' },
-//   { name: 'GoldCrayola',   hex: '#EDB28C', family: 'yellow' },
-//   { name: 'TerraCotta',    hex: '#EC7267', family: 'rose' },
-// ]
-
-// Pick at random
-const color = Palettes.MangoFire[Math.floor(Math.random() * palette.length)]
-
-// Filter by family
-const greens = Palettes.DeepForest.filter(c => c.family === 'green')
-```
-
-Palettes are useful for theme selection, level-specific color schemes, or procedurally generating cohesive visuals from a curated set.
+Moving the parent moves all children. Rotating the parent rotates children around the parent's origin.

@@ -29,14 +29,13 @@ game.switchScene(new MenuScene())  // ✅
 game.switchScene(menuScene)         // ❌ already exited
 ```
 
-### Setup in `onEnter()`, Teardown in `exit()`
+### Setup in `onEnter()`, Teardown in `onExit()`
 
 ```js
 class GameScene extends Scene {
   onEnter() {
-    const world = this.world
-    this.player = world.createEntity()
-    world.addMany(this.player, Transform, Velocity, Renderable, Visible, Collider, RenderBounds)
+    this.player = new Sprite(100, 100, 32, 32);
+    this.player.velocity.x = 200;
 
     this._actionMap.bind("jump", new KeyBinding(KeyCode.SPACE));
   }
@@ -54,124 +53,46 @@ class GameScene extends Scene {
   }
   update(dt) {
     if (this._actionMap.getState("pause").justPressed) {
-      this.pushScene(new PauseScene())
+      this.pushScene(new PauseScene());
     }
   }
 }
 ```
 
-## ECS Best Practices
+## Sprites
 
-### Entities Are Data, Not Objects
-
-Entities are integer IDs. Component data lives in typed arrays, not JavaScript objects. Access component data through the World:
+### Creating Sprites
 
 ```js
-// ✅ ECS way
-const vel = world.get(entity, Velocity)
-vel.x = 200
-
-// ❌ Avoid storing component objects
-entity.velocity = { x: 200, y: 0 }
+const player = new Sprite(100, 200, 32, 48);
+player.style.fill = "#B0DE8E";
 ```
 
-### Use Queries Instead of Manual Collections
+Sprites are created in the scene's default world automatically. They are processed by all built-in systems (movement, animation, collision, rendering).
+
+### Animation
+
+Use `sprite.animation.play(name)` to start an animation. It is **idempotent** — calling it repeatedly with the same name does not reset the animation.
 
 ```js
-// ✅ Let the ECS find matching entities
-const enemies = world.query({ all: [Transform, EnemyTag] })
+// Start walking animation
+player.animation.play("walk");
 
-// ❌ Manual list
-const enemiesList = []
+// Later, switch to jump — resets to frame 0
+player.animation.play("jump");
 ```
 
-### Keep Systems Focused
-
-Each system should do one thing well:
+Use `restart(name)` when you need to force a reset even if the same animation is already playing:
 
 ```js
-class GravitySystem extends System {
-  static query = { all: [Velocity] }
-  static priority = 0
-
-  update(ctx, dt) {
-    const vy = ctx.column(Velocity, 'y')
-    for (let r = 0; r < ctx.entityCount; r++) {
-      vy[r] += 500 * dt
-    }
-  }
-}
-
-class LifetimeSystem extends System {
-  static query = { all: [Lifetime] }
-  static priority = 10
-
-  update(ctx, dt) {
-    const remaining = ctx.column(Lifetime, 'remaining')
-    for (let r = 0; r < ctx.entityCount; r++) {
-      remaining[r] -= dt
-      if (remaining[r] <= 0) {
-        ctx.world.destroyEntity(ctx.entities()[r])
-      }
-    }
-  }
-}
+// Force restart the hurt animation even if already playing
+player.animation.restart("hurt");
 ```
 
-### Priority Ordering
-
-Use `static priority` to control execution order. Lower values run first:
-
-| Priority | Typical System |
-|----------|----------------|
-| -10 | `HierarchySystem` (world transform computation) |
-| 0 | Input processing, velocity updates |
-| 1 | Animation |
-| 2 | Collision detection |
-| 3 | Rendering |
-| 10 | Cleanup, lifetime management |
-
-### Use Tags for Entity Roles
+### Destroy When Done
 
 ```js
-class BossTag {}
-class InvulnerableTag {}
-
-world.add(entity, BossTag)
-world.add(entity, InvulnerableTag)
-
-const bosses = world.query({ all: [Transform, BossTag], none: [InvulnerableTag] })
-```
-
-### Prefabs for Reusable Entity Templates
-
-```js
-world.createPrefab('bullet')
-  .add(Transform, { scaleX: 0.5, scaleY: 0.5 })
-  .add(Velocity)
-  .add(Renderable, { fillColor: 0xFFFF00FF })
-  .add(Collider, { width: 8, height: 8 })
-  .add(RenderBounds, { width: 8, height: 8 })
-  .tag(ProjectileTag)
-
-const bullet = world.instantiate('bullet', {
-  Transform: { x: playerX, y: playerY },
-})
-```
-
-## Sprite Usage
-
-```js
-// Sprites wrap ECS entities — use the underlying world for bulk operations
-const player = new Sprite(100, 100, 32, 32)
-player.velocity.x = 200
-```
-
-### Use `destroy()` When Done
-
-```js
-player.destroy() // kills entity + cleans up groups
-// Don't use the sprite after destroy
+player.destroy(); // kills entity + cleans up groups
 ```
 
 ## Groups
@@ -180,41 +101,55 @@ player.destroy() // kills entity + cleans up groups
 
 ```js
 // Sprite-backed (mutable)
-const items = new Group()
-items.add(potion)
+const items = new Group();
+items.add(potion);
 
 // Query-backed (read-only, auto-populated)
-const enemies = Group.query(world, { all: [Transform, EnemyTag] })
-```
-
-### Query-Backed Groups Are Read-Only
-
-```js
-const enemies = Group.query(world, { all: [Transform, EnemyTag] })
-enemies.add(new Sprite()) // ❌ throws — read-only
+const enemies = Group.query(world, { all: [Transform, EnemyTag] });
 ```
 
 ### Enable Spatial Hash for Large Groups
 
 ```js
-group.useSpatialHash(64)
+group.useSpatialHash(64);
 ```
 
 ### Prefer Callback Collision
 
 ```js
-// Zero-alloc
 bullets.collideGroup(enemies, (bullet, enemy) => {
-  bullet.destroy()
-  enemy.health--
-})
+  bullet.destroy();
+  enemy.health--;
+});
 ```
 
 ## Camera
 
+Access the camera through `scene.view.camera`. The engine Scene creates a default View automatically.
+
 ```js
-const camera = new Camera(400, 300, 800, 600)
-camera.follow(player)
+class GameScene extends Scene {
+  onEnter() {
+    this.view.camera.lookAt(400, 300);
+    this.view.camera.zoom = 2;
+  }
+
+  update(dt) {
+    // Track a sprite
+    this.view.camera.target = this.player;
+  }
+}
+```
+
+For coordinate conversion (screen ↔ world):
+
+```js
+// Via the View
+const worldPt = this.view.screenToWorld(screenX, screenY);
+const screenPt = this.view.worldToScreen(worldX, worldY);
+
+// Or via the InputSystem's CoordinateSystem
+const pt = game.inputSystem.coordinateSystem.toWorld({ x: pointer.x, y: pointer.y });
 ```
 
 ## Game Loop
@@ -222,24 +157,15 @@ camera.follow(player)
 ### Never Put Simulation Logic in `render()`
 
 ```js
-// ❌ Bad
+// ❌ Bad — frame-rate dependent
 render(ctx) {
-  world.get(entity, Velocity).x = 5  // frame-rate dependent!
+  this.player.x += 5;
 }
 
-// ✅ Good
+// ✅ Good — runs at fixed timestep
 update(dt) {
-  // world.update(dt) is called automatically by engine Scene
+  this.player.x += 200 * dt;
 }
-```
-
-## State
-
-```js
-const gameState = new State({ score: 0, lives: 3 })
-gameState.subscribe(s => {
-  game.patchUI({ score: `Score: ${s.score}` })
-})
 ```
 
 ## Asset Loading
@@ -248,48 +174,62 @@ gameState.subscribe(s => {
 class BootScene extends Scene {
   async onEnter() {
     const task = ImageLoader.loadAll({
-      player: 'player.png',
-      enemy: 'enemy.png',
-    })
-    task.onProgress((l, t) => console.log(`${Math.round(l/t*100)}%`))
-    await task
-    this.switchScene(new MenuScene())
+      player: "player.png",
+      enemy: "enemy.png",
+    });
+    task.onProgress((l, t) => console.log(`${Math.round(l/t*100)}%`));
+    await task;
+    this.switchScene(new MenuScene());
   }
 }
 ```
 
 ## Performance
 
-### Use Bulk Column Access in Systems
-
-```js
-// ✅ Fast — direct typed array access
-update(ctx, dt) {
-  const x = ctx.column(Transform, 'x')
-  const y = ctx.column(Transform, 'y')
-  const vx = ctx.column(Velocity, 'x')
-  const vy = ctx.column(Velocity, 'y')
-  for (let r = 0; r < ctx.entityCount; r++) {
-    x[r] += vx[r] * dt
-    y[r] += vy[r] * dt
-  }
-}
-```
-
-### Use `ActivePool` for Hot Objects
+### Use `ActivePool` for Frequently Created/Destroyed Objects
 
 ```js
 const bulletPool = new ActivePool({
   create: () => new Sprite(0, 0, 4, 4),
   initialSize: 100,
-})
+});
 ```
 
-### Spatial Hash for Groups > 50
+### Spatial Hash for Large Collision Groups
+
+Enable spatial hash when a group exceeds ~50 sprites to maintain collision performance.
 
 ### Pool-Friendly Methods
 
 ```js
-Vec2.lerpInto(out, a, b, t)
-rect.getCenter(out)
+Vec2.lerpInto(out, a, b, t);
+rect.getCenter(out);
+```
+
+## Custom ECS Systems
+
+When you need custom game logic that runs on many entities, define a system:
+
+```js
+class GravitySystem extends System {
+  static query = { all: [Velocity] };
+  static priority = 0;
+
+  update(ctx, dt) {
+    const vy = ctx.column(Velocity, "y");
+    for (let r = 0; r < ctx.entityCount; r++) {
+      vy[r] += 500 * dt;
+    }
+  }
+}
+```
+
+Register it with your scene's world:
+
+```js
+class MyScene extends Scene {
+  onEnter() {
+    this.world.addSystem(GravitySystem);
+  }
+}
 ```

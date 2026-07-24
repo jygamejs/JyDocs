@@ -10,7 +10,7 @@ Scenes are **single-use** — once exited, they must not be re-entered. Create a
 const scene = new Scene()
 ```
 
-Creates `scene.root` — a `<div>` element for DOM UI overlays. Sets `blocksUpdateBelow = true` and `blocksRenderBelow = false`.
+Creates `scene.root` — a `<div>` element for DOM UI overlays. Sets `blocksUpdateBelow = true` and `blocksRenderBelow = false`. Creates a default `View` with a `Camera` accessible via `scene.view.camera`.
 
 The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.createDefault()`, giving each scene a pre-configured World with all built-in components, systems, and resources.
 
@@ -19,6 +19,8 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `scene.world` | `World` | | The scene's ECS World (lazily created) |
+| `scene.view` | `View` | `null` | Default View (created on `enter()`). Contains `view.camera`, `view.viewport`, `view.config` |
+| `scene.views` | `View[]` | `[]` | All views (including the default). Sort by `view.order` for render order |
 | `scene.blocksUpdateBelow` | `boolean` | `true` | Pause `update()` on scenes below |
 | `scene.blocksRenderBelow` | `boolean` | `false` | Skip `render()` on scenes below |
 | `scene._actionMap` | `ActionMap` | (internal) | Scene-specific action bindings for the InputSystem |
@@ -26,10 +28,11 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `enter()`, popped on `exit()` |
 
 The scene's `world` is lazily initialized on first access. During `enter()`, the engine Scene:
-1. Sets `world` resources: `CanvasContext` (canvas 2D context), `Camera` (viewport)
-2. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
-3. Creates an `InputContext` for the scene, registers it with `game.inputSystem.contextStack`
-4. Wires the scene's camera into `game.inputSystem.coordinateSystem.camera`
+1. Creates a default `View` (accessible via `scene.view`) with a `Camera`
+2. Sets `world` resources: `CanvasContext` (canvas 2D context), `Camera` (from the default View)
+3. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
+4. Creates an `InputContext` for the scene, registers it with `game.inputSystem.contextStack`
+5. Wires the scene's camera into `game.inputSystem.coordinateSystem.camera`
 
 On `exit()`:
 1. Pops the scene's `InputContext` from the context stack
@@ -131,6 +134,41 @@ scene.renderUI = function () {
   return `<h1>Score: ${this.score}</h1>`
 }
 ```
+
+## View Management
+
+The scene owns a list of `View` objects. Each view has a `Camera`, `Viewport`, and `RenderConfig`. The default view is created automatically on `enter()`.
+
+```js
+// Access the default view and its camera
+this.view.camera.lookAt(400, 300);
+this.view.camera.target = this.player;
+
+// Coordinate conversion
+const worldPt = this.view.screenToWorld(screenX, screenY);
+const screenPt = this.view.worldToScreen(worldX, worldY);
+```
+
+For split-screen or additional render passes:
+
+```js
+import { View, Viewport, Camera, RenderConfig, Layer } from "jygame";
+
+const minimap = new View({
+  viewport: new Viewport(600, 10, 180, 180),
+  camera: new Camera(400, 300, 0.25),
+  config: new RenderConfig({ clearColor: "#222", layers: Layer.ENTITIES }),
+  order: 1,
+});
+this.addView(minimap);
+```
+
+| Method | Description |
+|--------|-------------|
+| `addView(view)` | Add a view to the scene |
+| `removeView(view)` | Remove a view |
+| `clearViews()` | Remove all views |
+| `replaceView(oldView, newView)` | Swap one view for another |
 
 ## Event Listener Cleanup
 
