@@ -17,7 +17,8 @@ const game = new Game(options)
 | `height` | `number` | `600` | Logical canvas height (game pixels) |
 | `fps` | `number` | `60` | Fixed timestep target |
 | `maxTicks` | `number` | `5` | Maximum fixed ticks per frame (spiral-of-death protection) |
-| `debug` | `boolean` | `true` | Enable the diagnostics engine, in-game overlay (`\``), and workspace (`Ctrl+F3`) |
+| `debug` | `boolean` | `true` | Enable the diagnostics engine, in-game overlay (<code>~</code>), and workspace (<code>Ctrl+F3</code>) |
+| `imageSmoothing` | `boolean` | `false` | Whether to enable image smoothing on the canvas context |
 | `autoPause` | `boolean` | `true` | Auto-pause when the browser tab is hidden |
 | `scaleToFit` | `boolean \| object` | `null` | Viewport scaling config |
 

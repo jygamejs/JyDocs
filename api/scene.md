@@ -28,7 +28,7 @@ The engine `Scene` overrides `_createWorld()` to use `DefaultWorldBuilder.create
 | `scene._inputContext` | `InputContext` | (internal) | Auto-created InputContext, pushed on `onEnter()`, popped on `onExit()` |
 
 The scene's `world` is lazily initialized on first access. During scene activation (`onEnter()`), the engine Scene:
-1. Creates a default `View` (accessible via `scene.view`) with a `Camera`
+1. Creates a default `View` (accessible via `scene.view`) with a `Camera` centered on a viewport matching `game.width × game.height`
 2. Sets `world` resource: `CanvasContext` (canvas 2D context)
 3. Sets `Sprite._defaultWorld` to the scene's World (so `new Sprite()` uses it)
 4. Creates an `InputContext` for the scene, registers it with `game.inputSystem.contextStack`

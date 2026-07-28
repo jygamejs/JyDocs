@@ -83,7 +83,7 @@ import { Game, Scene } from "jygame";
 
 class MyScene extends Scene {
   onEnter() {
-    // Default camera is at (0, 0) with zoom = 1
+    // Default camera is centered on the viewport with zoom = 1
     this.view.camera.lookAt(400, 300);
     this.view.camera.zoom = 2;
   }
