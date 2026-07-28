@@ -19,6 +19,7 @@ const game = new Game(options)
 | `maxTicks` | `number` | `5` | Maximum fixed ticks per frame (spiral-of-death protection) |
 | `debug` | `boolean` | `true` | Enable the diagnostics engine, in-game overlay (<code>`</code>), and workspace (<code>Ctrl+F3</code>) |
 | `imageSmoothing` | `boolean` | `false` | Whether to enable image smoothing on the canvas context |
+| `interpolation` | `boolean` | `true` | Enable positional interpolation between fixed timesteps for smooth rendering |
 | `autoPause` | `boolean` | `true` | Auto-pause when the browser tab is hidden |
 | `scaleToFit` | `boolean \| object` | `null` | Viewport scaling config |
 
