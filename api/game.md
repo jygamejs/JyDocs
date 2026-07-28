@@ -46,7 +46,7 @@ The game manages a **stack of scenes**. The top scene receives events; scenes be
 
 ### `run(scene)`
 
-Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls the scene lifecycle (which invokes `onEnter()`), and begins the loop.
+Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls `scene.enter()` (which invokes your `onEnter()` hook), and begins the loop.
 
 ```js
 game.run(new MenuScene())
