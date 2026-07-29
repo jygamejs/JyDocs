@@ -100,17 +100,27 @@ game.isTopScene(scene)     // boolean
 
 ## Lifecycle Methods
 
-### `pause()`
+#### pause()
 
-Pauses the game loop. Calls `scene.pause()` on the top scene. Updates stop but rendering continues.
+Pauses the entire game loop. No input processing, updates, or rendering will occur while the game is paused. This method is intended for programmatic or engine-level pausing (for example, debugging or browser visibility handling).
 
-### `resume()`
+Do not bind `pause()` directly to an in-game key unless you have an external mechanism that calls `resume()`.
 
-Resumes the game loop. Resets the clock accumulator to prevent delta-time spikes.
+---
 
-### `togglePause()`
+#### resume()
 
-Toggles between paused and resumed states.
+Resumes the game loop and resets the internal clock accumulator to prevent delta-time spikes when returning from a paused state.
+
+---
+
+#### togglePause()
+
+Programmatically toggles between the paused and running states of the game loop.
+
+Because a paused game loop does not process input, `togglePause()` should not be bound directly to an in-game pause key (such as `Escape`) unless another system outside the paused game loop is responsible for calling it again.
+
+For in-game pause menus, prefer implementing gameplay-level pause behavior rather than pausing the entire engine.
 
 ### `destroy()`
 
