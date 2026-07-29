@@ -161,32 +161,24 @@ import {
 } from "jygame";
 
 class MenuScene extends Scene {
-  async onEnter() {
-    const move = new CompositeBinding(ActionKind.VECTOR2, [
-      { binding: new KeyBinding(KeyCode.KEY_D),       vector: [ 1,  0] },
-      { binding: new KeyBinding(KeyCode.KEY_A),       vector: [-1,  0] },
-      { binding: new KeyBinding(KeyCode.KEY_W),       vector: [ 0, -1] },
-      { binding: new KeyBinding(KeyCode.KEY_S),       vector: [ 0,  1] },
-      { binding: new KeyBinding(KeyCode.ARROW_RIGHT), vector: [ 1,  0] },
-      { binding: new KeyBinding(KeyCode.ARROW_LEFT),  vector: [-1,  0] },
-      { binding: new KeyBinding(KeyCode.ARROW_UP),    vector: [ 0, -1] },
-      { binding: new KeyBinding(KeyCode.ARROW_DOWN),  vector: [ 0,  1] },
-    ]);
-    this._actionMap.bind("move", move, ActionKind.VECTOR2);
-
-    this.sprite = new Sprite(100, 100);
+  onEnter() {
+    this._actionMap.bind("start", new KeyBinding(KeyCode.ENTER), ActionKind.DIGITAL);
   }
 
   update(dt) {
-    const speed = 300;
-    const m = this._actionMap.getState("move")?.vector ?? { x: 0, y: 0 };
-    this.sprite.velocity.x = m.x * speed;
-    this.sprite.velocity.y = m.y * speed;
+    if (this._actionMap.getState("start")?.pressed) {
+      this.game.pushScene(new GameScene());
+    }
   }
 
   render(ctx) {
     ctx.fillStyle = "#1a1a2e";
     ctx.fillRect(0, 0, this.game.width, this.game.height);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "32px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("Press ENTER to start", this.game.width / 2, this.game.height / 2);
   }
 }
 
