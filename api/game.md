@@ -150,6 +150,17 @@ Scene mutations (`pushScene`, `popScene`, `replaceScene`, `switchScene`) called 
 
 CSS `transform`-based scaling via the `scaleToFit` option. When enabled, the canvas is centered and scaled to fill the viewport while maintaining aspect ratio.
 
+## Rendering Pipeline
+
+Each frame the engine renders in this order:
+
+1. `scene.renderBackground(ctx)` — background layer (behind all sprites)
+2. `_renderWorld(ctx)` — automatic sprite/entity rendering (internal)
+3. `scene.render(ctx)` — foreground overlay (on top of the world)
+4. Debug overlay (if enabled)
+
+Use `renderBackground()` for world backgrounds and `render()` for HUD or on-screen effects.
+
 ## Example
 
 ```js
@@ -165,20 +176,22 @@ class MenuScene extends Scene {
     this._actionMap.bind("start", new KeyBinding(KeyCode.ENTER), ActionKind.DIGITAL);
   }
 
-  update(dt) {
-    if (this._actionMap.getState("start")?.pressed) {
-      this.game.pushScene(new GameScene());
-    }
+  renderBackground(ctx) {
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, this.game.width, this.game.height);
   }
 
   render(ctx) {
-    ctx.fillStyle = "#1a1a2e";
-    ctx.fillRect(0, 0, this.game.width, this.game.height);
-
     ctx.fillStyle = "#ffffff";
     ctx.font = "32px monospace";
     ctx.textAlign = "center";
     ctx.fillText("Press ENTER to start", this.game.width / 2, this.game.height / 2);
+  }
+
+  update(dt) {
+    if (this._actionMap.getState("start")?.pressed) {
+      this.game.pushScene(new GameScene());
+    }
   }
 }
 
@@ -202,6 +215,11 @@ class GameScene extends Scene {
       { binding: new KeyBinding(KeyCode.KEY_S),       vector: [ 0,  1] },
     ]);
     this._actionMap.bind("move", move, ActionKind.VECTOR2);
+  }
+
+  renderBackground(ctx) {
+    ctx.fillStyle = "#16213e";
+    ctx.fillRect(0, 0, this.game.width, this.game.height);
   }
 
   update(dt) {
