@@ -174,8 +174,6 @@ class MenuScene extends Scene {
     ]);
     this._actionMap.bind("move", move, ActionKind.VECTOR2);
 
-    this._actionMap.bind("action", new KeyBinding(KeyCode.SPACE), ActionKind.DIGITAL);
-
     this.sprite = new Sprite(100, 100);
   }
 
@@ -184,10 +182,6 @@ class MenuScene extends Scene {
     const m = this._actionMap.getState("move")?.vector ?? { x: 0, y: 0 };
     this.sprite.velocity.x = m.x * speed;
     this.sprite.velocity.y = m.y * speed;
-
-    if (this._actionMap.getState("action")?.pressed) {
-      this.sprite.scale = this.sprite.scale === 2 ? 1 : 2;
-    }
   }
 
   render(ctx) {
