@@ -180,12 +180,10 @@ class MenuScene extends Scene {
   }
 
   update(dt) {
-    const state = this._actionMap.getState("move");
-    if (!state) return;
-
     const speed = 300;
-    this.sprite.velocity.x = state.vector.x * speed;
-    this.sprite.velocity.y = state.vector.y * speed;
+    const m = this._actionMap.getState("move")?.vector ?? { x: 0, y: 0 };
+    this.sprite.velocity.x = m.x * speed;
+    this.sprite.velocity.y = m.y * speed;
 
     if (this._actionMap.getState("action")?.pressed) {
       this.sprite.scale = this.sprite.scale === 2 ? 1 : 2;
@@ -221,12 +219,10 @@ class GameScene extends Scene {
   }
 
   update(dt) {
-    const state = this._actionMap.getState("move");
-    if (!state) return;
-
     const speed = 350;
-    this.player.velocity.x = state.vector.x * speed;
-    this.player.velocity.y = state.vector.y * speed;
+    const m = this._actionMap.getState("move")?.vector ?? { x: 0, y: 0 };
+    this.player.velocity.x = m.x * speed;
+    this.player.velocity.y = m.y * speed;
   }
 }
 
