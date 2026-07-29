@@ -46,7 +46,7 @@ The game manages a **stack of scenes**. The top scene receives events; scenes be
 
 ### `run(scene)`
 
-Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls `scene.enter()` (which invokes your `onEnter()` hook), and begins the loop.
+Starts the game loop with a scene as the initial stack entry. Validates the scene is a fresh instance (not previously entered). Sets `scene.game = this`, mounts the scene, calls `scene.enter()` (which invokes your `onEnter()` hook — supports `async` for awaiting asset loading), and begins the loop.
 
 ```js
 game.run(new MenuScene())
@@ -100,7 +100,7 @@ game.isTopScene(scene)     // boolean
 
 ## Lifecycle Methods
 
-#### pause()
+### `pause()`
 
 Pauses the entire game loop. No input processing, updates, or rendering will occur while the game is paused. This method is intended for programmatic or engine-level pausing (for example, debugging or browser visibility handling).
 
@@ -108,13 +108,13 @@ Do not bind `pause()` directly to an in-game key unless you have an external mec
 
 ---
 
-#### resume()
+### `resume()`
 
 Resumes the game loop and resets the internal clock accumulator to prevent delta-time spikes when returning from a paused state.
 
 ---
 
-#### togglePause()
+### `togglePause()`
 
 Programmatically toggles between the paused and running states of the game loop.
 
@@ -142,47 +142,100 @@ Efficiently patches text content of DOM elements by id.
 game.patchUI({ score: 'Score: 42', lives: 'Lives: 3' })
 ```
 
-## Interpolation & Auto-Pause
-
-As in v0.4.0: the game loop calls `scene.interpolate(alpha)` after updates and before render. Auto-pause pauses the loop when the tab is hidden.
-
 ## Deferred Scene Operations
 
 Scene mutations (`pushScene`, `popScene`, `replaceScene`, `switchScene`) called during a scene's `update()` are **queued** and executed after the update cycle completes. This prevents mid-frame stack corruption.
 
 ## Viewport Scaling
 
-As in v0.4.0: CSS `transform`-based scaling via `scaleToFit` option.
+CSS `transform`-based scaling via the `scaleToFit` option. When enabled, the canvas is centered and scaled to fill the viewport while maintaining aspect ratio.
 
 ## Example
 
 ```js
-const game = new Game({ width: 800, height: 600 })
+import {
+  Game, Scene,
+  Sprite,
+  ActionKind, CompositeBinding, KeyBinding, KeyCode,
+  AnimationPack,
+} from "jygame";
 
 class MenuScene extends Scene {
-  onEnter() {
-    this.on(document, 'keydown', (e) => {
-      if (e.key === 'Enter') game.pushScene(new GameScene())
-    })
+  async onEnter() {
+    const move = new CompositeBinding(ActionKind.VECTOR2, [
+      { binding: new KeyBinding(KeyCode.KEY_D),       vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_A),       vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_W),       vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.KEY_S),       vector: [ 0,  1] },
+      { binding: new KeyBinding(KeyCode.ARROW_RIGHT), vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_LEFT),  vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_UP),    vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.ARROW_DOWN),  vector: [ 0,  1] },
+    ]);
+    this._actionMap.bind("move", move, ActionKind.VECTOR2);
+
+    this._actionMap.bind("action", new KeyBinding(KeyCode.SPACE), ActionKind.DIGITAL);
+
+    this.sprite = new Sprite(100, 100);
   }
+
+  update(dt) {
+    const state = this._actionMap.getState("move");
+    if (!state) return;
+
+    const speed = 300;
+    this.sprite.velocity.x = state.vector.x * speed;
+    this.sprite.velocity.y = state.vector.y * speed;
+
+    if (this._actionMap.getState("action")?.pressed) {
+      this.sprite.scale = this.sprite.scale === 2 ? 1 : 2;
+    }
+  }
+
   render(ctx) {
-    ctx.fillStyle = '#2F2F2F'
-    ctx.fillRect(0, 0, 800, 600)
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, this.game.width, this.game.height);
   }
 }
 
 class GameScene extends Scene {
-  onEnter() {
-    this.player = new Sprite(100, 100, 32, 32)
+  async onEnter() {
+    const anims = await AnimationPack.load({
+      path: "assets/character",
+      v2: 4,
+      v1: { frames: 4, prefix: "char_" },
+    });
+
+    this.player = new Sprite(400, 300);
+    this.player.animation.addAll(anims);
+    this.player.animation.play("v1");
+    this.player.scale = 3;
+
+    const move = new CompositeBinding(ActionKind.VECTOR2, [
+      { binding: new KeyBinding(KeyCode.KEY_D),       vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_A),       vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_W),       vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.KEY_S),       vector: [ 0,  1] },
+    ]);
+    this._actionMap.bind("move", move, ActionKind.VECTOR2);
   }
+
   update(dt) {
-    movementSystem.updateOne(this.player, dt)
-  }
-  render(ctx) {
-    ctx.clearRect(0, 0, 800, 600)
-    renderSystem.renderOne(ctx, this.player)
+    const state = this._actionMap.getState("move");
+    if (!state) return;
+
+    const speed = 350;
+    this.player.velocity.x = state.vector.x * speed;
+    this.player.velocity.y = state.vector.y * speed;
   }
 }
 
-game.run(new MenuScene())
+const game = new Game({
+  width: 800,
+  height: 600,
+  imageSmoothing: false,
+  autoPause: true,
+});
+
+game.run(new MenuScene());
 ```
