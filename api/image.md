@@ -68,7 +68,7 @@ A `LoadingTask` exposes `promise` (the underlying promise), `progress` (`0`–`1
 
 ### Caching
 
-Images are cached forever — by path *and* by name. A second `load()` for the same key is a no-op that resolves to the already-loaded element. To drop entries, use [cache management](#cache-management--get--has--remove--clear).
+Images are cached forever — by path *and* by name. A second `load()` for the same key is a no-op that resolves to the already-loaded element. To drop entries, use [cache management](#cache-management-—-get-has-remove-clear).
 
 A failed load rejects with `Error: Failed to load image: <path>`.
 
