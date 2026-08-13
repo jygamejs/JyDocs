@@ -195,6 +195,7 @@ shot.play();
 | `volume` | `number` | Default volume used when this sound plays, `0`–`1` |
 | `loop` | `boolean` | Default looping behavior for playback started from this sound |
 | `group` | `string` | Which [`AudioGroup`](#audiogroupname) this sound belongs to (`"master"` by default) |
+| `attenuation` | `string` | This sound's spatial falloff (`"linear"`, `"quadratic"`, `"inverse"`), overriding the global `Audio.attenuation` |
 | `duration` | `number` | Clip length in seconds (asset-level, read-only) |
 | `isPlaying` | `boolean` | Whether **any** occurrence is currently playing |
 | `play(options?)` | | Start a new occurrence; returns an `AudioInstance` |
@@ -235,7 +236,21 @@ The options are per-play **overrides**; they apply to that one occurrence withou
 | `minDistance` | `number` | `32` | Distance at which the sound is at full volume |
 | `maxDistance` | `number` | `512` | Distance at which it is silent |
 
-`x`/`y` make the instance spatial automatically. Its volume is then derived from the distance to [`Audio.listener`](#audiolistener) — full inside `minDistance`, silent at/after `maxDistance`, and attenuated in between (linear by default). The listener is what you move around the world; sound sits still at its `x`/`y`.
+`x`/`y` make the instance spatial automatically. Its volume is then derived from the distance to [`Audio.listener`](#audiolistener) — full inside `minDistance`, silent at/after `maxDistance`, and attenuated in between. The listener is what you move around the world; the sound sits still at its `x`/`y`.
+
+The falloff model is set with `Audio.attenuation` — `"linear"` (default), `"quadratic"`, or `"inverse"` — and `Audio.inverseRolloff` tunes the inverse model:
+
+```js
+Audio.attenuation = "quadratic";   // world default: objects fall off faster with distance
+Audio.inverseRolloff = 4;          // shape of the "inverse" model
+```
+
+A single sound can override the world default with its own `attenuation`:
+
+```js
+const whisper = await Audio.load("whisper.wav", { backend: "web" });
+whisper.attenuation = "quadratic";   // this sound falls off faster
+```
 
 ### The returned instance
 
@@ -402,11 +417,12 @@ Effects are audio processors chained between a sound and the output — filters,
 
 ### Where effects live
 
-An effect chain can be attached at three levels, and they compose (master → group → sound):
+An effect chain can be attached at four levels, and they compose (master → group → sound):
 
 - **Master** — `Audio.effects`, applies to everything in the game.
 - **Group** — `Audio.group("sfx").effects`, applies to everything in that group.
 - **Sound** — `sound.effects`, applies to one loaded clip.
+- **Music** — `Audio.music("theme").effects`, applies to one music track.
 
 ```js
 import { Audio, ReverbEffect, LowPassEffect, DelayEffect } from "jygame";
@@ -421,11 +437,14 @@ Audio.group("ui").effects.add(new LowPassEffect({ frequency: 1200 }));
 const gunshot = await Audio.load("gunshot", "assets/gunshot.wav", { backend: "web" });
 gunshot.effects.add(new DelayEffect({ time: 0.4, feedback: 0.35 }));
 gunshot.play();
+
+// Darken the music track:
+Audio.music("theme").effects.add(new LowPassEffect({ frequency: 2200 }));
 ```
 
 The chain API is the same everywhere: `add(effect)`, `remove(effect)`, `clear()`, and `length`.
 
-> Sound-level effects are wired when a playback is created, so add them **before** `play()`. Group and master chains reconnect live — you can add or remove effects at any time.
+> Sound- and music-level effects are wired when a playback is created, so add them **before** `play()`. Group and master chains reconnect live — you can add or remove effects at any time.
 
 ### The effects
 
@@ -489,17 +508,11 @@ theme.play();                   // queued (returns the handle, isPlaying false)
 
 So "music that should start on its own" doesn't error out on a fresh page — it waits politely for the first click, then begins. If your game already has a guaranteed gesture (a "Press to start" screen, a menu button), the gate opens on that and the queued music follows.
 
-The gate is a manager-level concern; the facade just exposes the behavior. If you need finer control, the `AudioManager` accepts an `autoplay` option — but the default covers the common cases.
-
-## What's not on the facade
-
-`Audio` is deliberately small. The classes behind it — `Sound`, `Music`, `AudioGroup`, `AudioInstance`, `AudioListener`, `AudioScene`, `AudioDefinition`, the backends, and the `AudioManager` itself — are all exported from `jygame` for advanced setups: effect chains, snapshots and crossfading whole scenes, `AudioDefinition` configs, diagnostics, and so on. If you find yourself fighting the facade, those are the next layer down.
-
-If you need a level of control the facade doesn't cover — a fully custom setup, or embedding the audio system in your own architecture — construct an `AudioManager` directly with an explicit `backend` and drive audio through that instead:
+`Audio.autoplay` controls this behavior. The default, `"gated"`, queues playback until the first gesture. Set it to `"none"` to skip the queue and play immediately — the browser's own autoplay policy then decides whether the audio actually sounds:
 
 ```js
-import { AudioManager, HtmlAudioBackend } from "jygame";
-const audio = new AudioManager({ backend: new HtmlAudioBackend() });
-audio.add("coin", clip);
-audio.play("coin");
+Audio.autoplay = "gated";   // default — queue until the first user gesture
+Audio.autoplay = "none";    // play immediately, let the browser decide
 ```
+
+`Audio.autoplay` accepts only `"gated"` or `"none"`; anything else throws.
