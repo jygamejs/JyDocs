@@ -36,6 +36,7 @@ export default defineConfig({
             { text: 'Keys', link: '/api/keys' },
             { text: 'Image', link: '/api/image' },
             { text: 'Audio', link: '/api/audio' },
+            { text: 'Font', link: '/api/font' },
           ],
         },
       ],
