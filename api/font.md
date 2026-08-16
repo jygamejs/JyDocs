@@ -166,6 +166,59 @@ ink.render(ctx, "GAME OVER", 160, 60, { align: "center", color: "#ff0000" });
 
 `measure(text, { scale })` mirrors `render()`'s geometry, so centering and right-aligning are exact. Characters missing from the image are skipped (their advance still applies), and the space advance comes from `spaceWidth` or the widest glyph.
 
+### Bitmap glyphs
+
+A bitmap glyph is represented by a **glyph record**: renderable region data plus font metrics. It is not an image object:
+
+> **`BitmapFont` exposes glyph records, not glyph images. A glyph record contains a source region and font metrics. The source region may currently reference an individual glyph canvas, but the contract also supports multiple glyphs sharing a single atlas. Consumers must depend only on the region/metrics contract.**
+
+```js
+const glyph = font.glyph("A");   // { region, advance, offsetX, offsetY }
+
+glyph.region;     // { sourceImage, sx, sy, sw, sh } — what to draw and where to cut it
+glyph.advance;    // how far the next glyph moves — includes the font's `spacing`
+glyph.offsetX;    // layout offset of the glyph box from the advance cursor
+glyph.offsetY;    // vertical layout offset of the glyph box
+```
+
+`font.glyph(ch)` and `font.getGlyph(ch)` return the same stable record (no allocation per call); `font.getTintedGlyph(ch, color)` returns the same shape with the glyph body recolored — tinting produces **another glyph record**, not a parallel canvas API. The record's `region` is an `AtlasRegion`, the same region shape sprite sheets use. Its `sourceImage` is whatever the font provider backs the glyph with.
+
+Today the bitmap font stores one small canvas per glyph, so each region is:
+
+```js
+{ sourceImage: glyphCanvas, sx: 0, sy: 0, sw: glyphCanvas.width, sh: glyphCanvas.height }
+```
+
+That is an **implementation detail of the font provider**, not part of the contract. An atlas-backed font can instead return every glyph's region pointing into one shared source:
+
+```js
+{ sourceImage: fontAtlas, sx: 32, sy: 16, sw: 8, sh: 12 }
+```
+
+— with **no changes** to `TextLayout`, `TextRasterizer`, `TextSystem`, or the public `Text` API. Callers should treat the glyph record, not the canvas, as the API.
+
+Glyph records flow through the text pipeline as stable font-resource data: layout consumes the metrics (and stores the records), rasterization consumes each record's region. The intended architecture:
+
+```text
+BitmapFont
+    ↓
+GlyphRecord
+    ↓
+    ├── TextRasterizer
+    │       ↓
+    │   cached text surface      ← the rasterized Text of today
+    │
+    └── GlyphRenderer            ← future work
+            ↓
+        glyph instances
+        ↓
+        atlas
+        ↓
+        batched rendering
+```
+
+The second branch — rendering individual glyphs from an atlas — is explicitly **future work**. This contract is what makes it an implementation detail of the font rather than a redesign of `Text`: `Text` (see [the Text facade](text.md)) reads `region` + `advance`, rasterizes the whole string into one cached surface, and never depends on how the font stores glyphs.
+
 ### Batch loading
 
 All three batch forms resolve to an object of fonts keyed by name (via a **`LoadingTask`**, like `Image`/`Audio`):
