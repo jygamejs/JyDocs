@@ -4,7 +4,7 @@ title: Text
 
 # Text
 
-`Text` is the retained, world-space text object. Where [`Font.render(ctx, ...)`](font.md#drawing-with-a-bitmap-font) draws immediately into a 2D context — screen-space, behind or above the world, with no z-order — a `Text` is an **entity**: it lives in the scene's ECS, sorts by `layer` and `depth` alongside sprites, interpolates with the render queue, and renders in one of two selectable representations — by default the whole string is composited into **one rasterized bitmap** drawn with a single textured quad on every backend. It is the engine's answer to "text that behaves like every other renderable."
+`Text` is the retained, world-space text object. Where [`Font.render(ctx, ...)`](font.md#drawing-with-a-bitmap-font) draws immediately into a 2D context — screen-space, behind or above the world, with no z-order — a `Text` is an **entity**: it lives in the scene's ECS, sorts by `layer` and `depth` alongside sprites, interpolates with the render queue, and renders in one of two selectable representations — by default each glyph stays an individually renderable quad (see [Rendering representations](#rendering-representations)). It is the engine's answer to "text that behaves like every other renderable."
 
 ```js
 import { Game, Scene, Text, Font } from "jygame";
@@ -44,23 +44,23 @@ A `Text` is not a canvas draw — it is a small ECS entity (a `Transform`, a `Re
 
 ## Rendering representations
 
-`Text` can be rendered using two representations, selected with `text.renderMode`:
+`Text` can be rendered using two representations, selected with `text.renderMode`. The value accepts a string name or its `TextRenderMode` constant — the string resolves to the constant automatically:
 
 | Value | Constant | Meaning |
 |-------|----------|---------|
-| `"raster"` / `"rasterized"` | `TextRenderMode.RASTERIZED` (default) | The text is composed into a single bitmap before rendering. Best for static or infrequently changing text; minimizes render work — one quad. |
-| `"glyph"` | `TextRenderMode.GLYPH` | Glyphs remain individually renderable primitives. Best for animated text and effects that operate per character. |
+| `"glyph"` | `TextRenderMode.GLYPH` (**default**) | Glyphs remain individually renderable primitives. Best for animated text and effects that operate per character. `GLYPH` is value `0`, so it is what a bare `new Text(...)` gets. |
+| `"raster"` / `"rasterized"` | `TextRenderMode.RASTERIZED` | The text is composed into a single bitmap before rendering. Best for static or infrequently changing text; minimizes render work — one quad. |
 
 ```js
 import { Text, TextRenderMode } from "jygame";
 
-const staticLabel = new Text(100, 100, font, "Score: 0");      // rasterized (default)
-const dynamic = new Text(100, 150, font, "Level 1", {
-  renderMode: TextRenderMode.GLYPH,
+const dynamic = new Text(100, 150, font, "Level 1");            // glyph (default)
+const staticLabel = new Text(100, 100, font, "Score: 0", {
+  renderMode: "raster",                                          // or TextRenderMode.RASTERIZED
 });
 
-dynamic.renderMode = TextRenderMode.GLYPH;   // select the glyph representation
-staticLabel.renderMode = "raster";           // back to the cached bitmap
+dynamic.renderMode = "glyph";      // same as TextRenderMode.GLYPH
+staticLabel.renderMode = "raster"; // same as TextRenderMode.RASTERIZED
 ```
 
 Both modes share the entire pipeline until the final representation: the same `Font`/`GlyphRecord` contract, the same `TextLayout` (positions, alignment, advances, offsets, width, height), the same `Transform`, `Renderable`, `Visible`, and `Text` API. They differ **only** in how the shared layout is drawn:
@@ -97,7 +97,7 @@ The optional `options` object applies initial styling in one call:
 | `depth` | `number` | `0` | The sort value within the layer |
 | `scale` | `number` \| `{ x, y }` | `1` | Uniform or per-axis scale of the glyphs |
 | `visible` | `boolean` | `true` | Start hidden or shown |
-| `renderMode` | `TextRenderMode` | `TextRenderMode.RASTERIZED` | The rendering representation — see [Rendering representations](#rendering-representations) |
+| `renderMode` | `"glyph"` \| `"raster"` \| `TextRenderMode` | `TextRenderMode.GLYPH` | The rendering representation — see [Rendering representations](#rendering-representations) |
 
 ```js
 const title = new Text(400, 50, font, "LEVEL 1", {
@@ -292,11 +292,11 @@ GlyphRecord
     ↓
 TextLayout
     ↓
-    ├── TextRasterizer        ← RASTERIZED mode (default)
+    ├── TextRasterizer        ← RASTERIZED mode
     │       ↓
     │   cached text surface   ← one RenderQueue command
     │
-    └── GlyphRenderer         ← GLYPH mode
+    └── GlyphRenderer         ← GLYPH mode (default)
             ↓
         glyph instances       ← per-glyph RenderQueue commands
             ↓
@@ -329,7 +329,7 @@ These names are exported from `jygame`:
 |--------|------|-----------|
 | `Text` | class | The facade you use — `new Text(x, y, font, content, options)` |
 | `TextComponent` | component | The SoA component schema (`fontHandle`, `contentHandle`, `align`, `letterSpacing`, `version`, `colorEnabled`, `surfaceVersion`, `renderMode`) |
-| `TextRenderMode` | constants | `RASTERIZED` (0) and `GLYPH` (1) |
+| `TextRenderMode` | constants | `GLYPH` (0) and `RASTERIZED` (1) |
 | `TextSystem` | system | Coordinates layout + representation dispatch, emits the text's `RenderQueue` commands (priority 4) |
 | `TextResourcePool` | resource | The content/layout/surface pool, set as a world resource by `Text` |
 
