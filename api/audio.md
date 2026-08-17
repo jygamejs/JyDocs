@@ -13,7 +13,7 @@ const shot = await Audio.load("assets/shot.mp3");
 shot.volume = 0.7;
 shot.play();
 
-const music = Audio.music("assets/theme.mp3");
+const music = await Audio.music("assets/theme.mp3");
 music.play();
 ```
 
@@ -27,7 +27,7 @@ Most of what you write is one of these three:
 |------|--------------|
 | `Audio.load(...)` | Fetch and decode an audio clip, return a **sound handle** |
 | `sound.play()` | Fire a **one-shot** sound effect, returning an `AudioInstance` |
-| `Audio.music(key)` | Get a **looping** `Music` handle for background tracks |
+| `Audio.music(...)` | Load (or get) a **looping** `Music` handle for background tracks |
 
 `load()` is for clips — each one comes back as a reusable **`Sound`** you configure once and play any number of times. `music()` is for long tracks — it returns a single handle you drive with `play()`/`pause()`/`stop()` and fades.
 
@@ -35,7 +35,7 @@ Most of what you write is one of these three:
 const jump = await Audio.load("assets/jump.mp3");
 jump.play();
 
-const theme = Audio.music("assets/theme.mp3");
+const theme = await Audio.music("assets/theme.mp3");
 theme.play();
 ```
 
@@ -280,16 +280,25 @@ When a non-looping instance reaches the end it is returned to its sound's pool a
 
 > **Before the first user interaction, `play()` returns `null`.** Browsers block audio until the player has clicked or pressed a key. The engine queues those early calls and flushes them on the first gesture (see [Autoplay](#autoplay-and-the-unlock-gate)).
 
-## `Audio.music(key)`
+## `Audio.music(...)`
 
-Gets a **`Music`** handle for a loaded clip. Unlike `play()`, `music()` returns the *same* object on every call — there is one handle per key, cached for the lifetime of the page. Music loops by default and is designed to be faded, paused, and resumed.
+Gets a **`Music`** handle for a long track. `music()` accepts the same forms as `load()` and resolves a `Promise<Music>`, so it can fetch the clip on demand — you do **not** need a separate `Audio.load()` first:
 
 ```js
-const theme = Audio.music("assets/theme.ogg");
-theme.play();
+const theme = await Audio.music("assets/theme.ogg");     // load by path
+const bgm   = await Audio.music("bgm", "assets/bg.ogg"); // load named
 ```
 
-If the clip isn't loaded, `music()` throws: `Audio: music "<key>" not found. Load it first with Audio.load().`
+Like `load()`, the named form registers the clip under the name *and* the path, so afterwards you can reach the same loaded asset through the facade — `Audio.play("bgm")`, `Audio.get("bgm")`, `Audio.has("bgm")` — or fetch the music handle again by either key:
+
+```js
+const bgm = await Audio.music("bgm");
+bgm.fadeIn(2);
+```
+
+`music()` returns the **same** object for a given key on every call — there is one handle per key, cached for the lifetime of the page. Music loops by default and is designed to be faded, paused, and resumed.
+
+A key that is not loaded and is not a path throws: `Audio: music "<key>" not found. Load it first with Audio.load().`
 
 ### Driving a track
 
@@ -308,7 +317,7 @@ If the clip isn't loaded, `music()` throws: `Audio: music "<key>" not found. Loa
 | `isPlaying` / `isPaused` | `boolean` | Playback state |
 
 ```js
-const theme = Audio.music("theme");
+const theme = await Audio.music("theme");
 
 theme.fadeIn(2);                        // fade the menu music up
 // ...
@@ -318,7 +327,7 @@ theme.play();                           // back to normal
 
 `fadeIn`/`fadeOut`/`crossFade` are driven by the engine's update loop, so they keep running even though the `Music` object doesn't own a timer of its own.
 
-> `music()` and `play()` share the same loaded assets. `Audio.music("shot")` on a sound-effect clip is legal — it just means that clip played as a looping track.
+> `music()` and `play()` share the same loaded assets. `await Audio.music("shot")` on a sound-effect clip is legal — it just means that clip played as a looping track.
 
 ## `Audio.group(name)`
 
@@ -422,7 +431,7 @@ An effect chain can be attached at four levels, and they compose (master → gro
 - **Master** — `Audio.effects`, applies to everything in the game.
 - **Group** — `Audio.group("sfx").effects`, applies to everything in that group.
 - **Sound** — `sound.effects`, applies to one loaded clip.
-- **Music** — `Audio.music("theme").effects`, applies to one music track.
+- **Music** — `(await Audio.music("theme")).effects`, applies to one music track.
 
 ```js
 import { Audio, ReverbEffect, LowPassEffect, DelayEffect } from "jygame";
@@ -439,7 +448,8 @@ gunshot.effects.add(new DelayEffect({ time: 0.4, feedback: 0.35 }));
 gunshot.play();
 
 // Darken the music track:
-Audio.music("theme").effects.add(new LowPassEffect({ frequency: 2200 }));
+const theme = await Audio.music("theme");
+theme.effects.add(new LowPassEffect({ frequency: 2200 }));
 ```
 
 The chain API is the same everywhere: `add(effect)`, `remove(effect)`, `clear()`, and `length`.
@@ -500,7 +510,7 @@ Browsers refuse to play audio before the player has interacted with the page. Th
 // On game boot, before any input:
 const intro = await Audio.load("intro", "assets/intro.mp3");
 intro.play();                   // queued; returns null
-const theme = Audio.music("theme");
+const theme = await Audio.music("theme");
 theme.play();                   // queued (returns the handle, isPlaying false)
 
 // The player clicks or presses a key → the intro fires and the theme starts.
