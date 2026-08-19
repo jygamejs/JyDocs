@@ -82,7 +82,7 @@ Exactly one slicing strategy is required — `gridX`/`gridY` **or** `separator`.
 
 A vertical line of the `separator` color divides glyphs, like a sprite sheet separated by colored gutters. The engine finds the content bounds, splits at every separator column, and trims each glyph to its opaque pixels — so glyphs of different widths work naturally. The number of glyphs found must equal `characters.length`.
 
-`font.png` is a real font that needs the whole package above: one old-style row of red glyphs sitting on an opaque black background, divided by `rgb(127, 127, 127)` gutters:
+Here's a real example — `font.png`, one old-style row of red glyphs sitting on an opaque black background, divided by `rgb(127, 127, 127)` gutters:
 
 <img src="/font.png" alt="font.png — red glyphs separated by rgb(127, 127, 127) divider columns" width="633" class="pixel-art" />
 
