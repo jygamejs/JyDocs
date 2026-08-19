@@ -101,23 +101,13 @@ font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 
 `background` lets you use older font images that have an opaque background instead of transparency. Its color is ignored during slicing (so it doesn't inflate glyph boxes) and cleared from each sliced glyph — so nothing draws as a black block, and `render()`'s `color` tinting hits only the actual glyph shape. `caseInsensitive` is for fonts that contain a single case: with it on, `"Hello world"` renders correctly from a `characters` set that only has `"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:"`.
 
-`colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
-
 #### Grid slicing
 
 The image is a uniform grid. `characters` are assigned left → right, top → bottom, and must fit within `gridX × gridY` cells:
 
-```js
-// 2 columns × 1 row → "A B"
-const font = await Font.load("Grid", {
-  image: "grid.png",
-  characters: "AB",
-  gridX: 2,
-  gridY: 1,
-});
-```
+`colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
 
-Here's a real grid font — `spr_font.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set:
+Here's a real grid font that needs it — `spr_font.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set. Its glyphs carry a light-gray drop shadow, so the `colors` option is exactly what keeps the shading intact when tinting:
 
 <img src="/spr_font.png" alt="spr_font.png — a 10 × 11 grid of glyphs" width="480" class="pixel-art" />
 
@@ -134,8 +124,6 @@ const font = await Font.load("spr", {
 
 font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 ```
-
-`spr_font.png`'s glyphs carry a light-gray drop shadow, so when tinting this font list the glyph body's colors in a `colors` option — the shadow is then left untouched (see the option table above).
 
 ### Batch loading
 
