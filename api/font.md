@@ -107,15 +107,15 @@ The image is a uniform grid. `characters` are assigned left → right, top → b
 
 `colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
 
-Here's a real grid font that needs it — `spr_font.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set. Its glyphs carry a light-gray drop shadow, so the `colors` option is exactly what keeps the shading intact when tinting:
+Here's a real grid font that needs it — `grid.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set. Its glyphs carry a light-gray drop shadow, so the `colors` option is exactly what keeps the shading intact when tinting:
 
-<img src="/spr_font.png" alt="spr_font.png — a 10 × 11 grid of glyphs" width="480" class="pixel-art" />
+<img src="/grid.png" alt="grid.png — a 10 × 11 grid of glyphs" width="480" class="pixel-art" />
 
 > Source: [Hello My Old Friend](https://lotovik.itch.io/hello-my-old-friend) by lotovik.
 
 ```js
 const font = await Font.load("spr", {
-  image: "spr_font.png",
+  image: "grid.png",
   characters: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$￠€£¥¤+-*/÷=%‰\"'#@&_(),.;:¿?¡!\\|{}<>[]§¶µ`^~©®™",
   gridX: 10,
   gridY: 11,

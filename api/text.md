@@ -10,7 +10,7 @@ title: Text
 import { Game, Scene, Text, Font } from "jygame";
 
 const font = await Font.load("spr", {
-  image: "assets/spr_font.png",
+  image: "grid.png",
   characters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:",
   gridX: 10,
   gridY: 11,
