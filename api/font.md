@@ -14,7 +14,7 @@ import { Font } from "jygame";
 
 // Bitmap — the engine draws it for you:
 const ink = await Font.load("Ink", {
-  image: "assets/fonts/ink.png",
+  image: "assets/ink.png",
   characters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!? ",
   gridX: 16,
   gridY: 4,
@@ -22,7 +22,7 @@ const ink = await Font.load("Ink", {
 ink.render(ctx, "Score: 100", 10, 60, { color: "#ffcc00", scale: 2 });
 
 // Native — drawn with the canvas text API:
-const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+const pixel = await Font.load("Pixel", "assets/pixel.ttf");
 pixel.render(ctx, "Score", 10, 30, { color: "#ffffff", size: 24 });
 ```
 
@@ -35,7 +35,7 @@ The same call handles both kinds. Give a name + a path for a native font, or a n
 ### Native — `load(name, path)`
 
 ```js
-const font = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+const font = await Font.load("Pixel", "assets/pixel.ttf");
 ```
 
 Loading registers the family with the browser (awaiting its `FontFace` load), so **after the `await`, the font is ready** to measure and draw — no extra readiness step. The returned **`NativeFont`** is a thin descriptor:
@@ -57,7 +57,7 @@ Loads an image and slices it into glyphs. The config names the image, the charac
 
 ```js
 const ink = await Font.load("Ink", {
-  image: "assets/fonts/ink.png",
+  image: "assets/ink.png",
   characters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!? ",
   gridX: 16,          // 16 columns…
   gridY: 4,           // …and 4 rows of glyphs
@@ -144,8 +144,8 @@ All three batch forms resolve to an object of fonts keyed by name (via a **`Load
 ```js
 // Native batch — { name: path }:
 const fonts = await Font.load({
-  ui:   "assets/fonts/ui.ttf",
-  big:  "assets/fonts/big.otf",
+  ui:   "assets/ui.ttf",
+  big:  "assets/big.otf",
 });
 
 // Bitmap batch map — { name: config }:
@@ -217,7 +217,7 @@ A **`NativeFont`** draws and measures itself with the same options shape a bitma
 | `baseline` | `string` | `"top"` | Canvas `textBaseline` for `render()` |
 
 ```js
-const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+const pixel = await Font.load("Pixel", "assets/pixel.ttf");
 
 pixel.render(ctx, "Hello", 10, 40, { color: "#ffffff", size: 24 });
 pixel.measure("Hello", { size: 24 });     // { width, height } in pixels
