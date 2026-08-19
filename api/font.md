@@ -4,18 +4,13 @@ title: Font
 
 # Font
 
-`Font` is the facade for text. It is a global singleton like `Input` — no instances, no wiring — and it loads two very different kinds of font:
+`Font` is the facade for text — the single place you load fonts, measure strings, and draw text. It is a global singleton like `Input`: no instances, no wiring. It loads two very different kinds of font:
 
-- **Native** fonts — `.ttf`/`.otf`/`.woff` files registered with the browser via the `FontFace` API, drawn with the standard canvas text methods.
-- **Bitmap** fonts — an image sliced into glyphs, drawn by the engine (`render()`) with scaling, tinting, and alignment built in.
+- **Bitmap** fonts — an image sliced into glyphs, drawn with scaling, tinting, and alignment built in.
+- **Native** fonts — `.ttf`/`.otf`/`.woff` files registered with the browser, drawn with the standard canvas text methods.
 
 ```js
 import { Font } from "jygame";
-
-// Native — use it with the canvas API:
-const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
-ctx.font = "24px Pixel";
-ctx.fillText("Score", 10, 30);
 
 // Bitmap — the engine draws it for you:
 const ink = await Font.load("Ink", {
@@ -25,9 +20,13 @@ const ink = await Font.load("Ink", {
   gridY: 4,
 });
 ink.render(ctx, "Score: 100", 10, 60, { color: "#ffcc00", scale: 2 });
+
+// Native — drawn with the canvas text API:
+const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+pixel.render(ctx, "Score", 10, 30, { color: "#ffffff", size: 24 });
 ```
 
-Everything is cached by name — loading the same font twice returns the same object, no second fetch. Which kind a name refers to is fixed once loaded; the returned object exposes `kind` (`"native"` or `"bitmap"`).
+Everything is cached by name — loading the same font twice returns the same object, no second fetch. Which kind a name refers to is fixed once loaded; the returned object exposes `kind` (`"bitmap"` or `"native"`).
 
 ## `Font.load(...)`
 
@@ -39,37 +38,18 @@ The same call handles both kinds. Give a name + a path for a native font, or a n
 const font = await Font.load("Pixel", "assets/fonts/pixel.ttf");
 ```
 
-Loading registers the family with the browser (awaiting its `FontFace` load), so **after the `await`, the font is ready** to measure and rasterize — no extra readiness step. The returned **`NativeFont`** is a thin descriptor:
+Loading registers the family with the browser (awaiting its `FontFace` load), so **after the `await`, the font is ready** to measure and draw — no extra readiness step. The returned **`NativeFont`** is a thin descriptor:
 
 | Member | Type | Meaning |
 |--------|------|---------|
 | `name` | `string` | The registry key you loaded it under |
 | `kind` | `string` | `"native"` |
-| `family` | `string` | The font family name (= `name`) for `ctx.font` |
+| `family` | `string` | The font family name (= `name`) — the value used in `ctx.font` |
 | `render(ctx, text, x, y, opts?)` | | Draw `text` at `(x, y)` on a 2D context |
 | `measure(text, opts?)` | | `{ width, height }` in pixels |
-| `capabilities` | `{ glyph, raster }` | `{ glyph: false, raster: true }` — retained `Text` render modes the font supports |
+| `capabilities` | `{ glyph, raster }` | `{ glyph: false, raster: true }` — the retained [`Text`](#text--retained-world-space-text) render modes this font supports |
 
-A `NativeFont` draws with the canvas text API directly, or through the same options shape `BitmapFont` uses:
-
-```js
-const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
-
-pixel.render(ctx, "Hello", 10, 40, { color: "#ffffff", size: 24 });   // ctx.font + fillText
-pixel.measure("Hello", { size: 24 });                                  // { width, height }
-```
-
-`render()` / `measure()` options:
-
-| Option | Type | Default | Meaning |
-|--------|------|---------|---------|
-| `size` | `number` | `16` | Font size in pixels |
-| `scale` | `number` | `1` | Multiply the size (`final px = size × scale`) |
-| `color` | `string` | `"#000000"` | Text color (any CSS color) |
-| `align` | `string` | `"left"` | `"left"`, `"center"`, or `"right"` |
-| `baseline` | `string` | `"top"` | Canvas `textBaseline` for `render()` |
-
-Native fonts also work with **retained `Text`** in raster mode — `new Text(x, y, "Pixel", "SCORE 0", { renderMode: "raster" })` measures the string with Canvas2D text metrics and rasterizes it into the same cached text surface a rasterized bitmap font produces (see [the Text facade](text.md#fonts--bitmap-and-native)). The default `TextRenderMode.GLYPH` is not supported by native fonts, so the raster mode must be requested explicitly.
+A native font can also be used with the canvas API directly — `ctx.font = "24px Pixel"` then `ctx.fillText(...)` — or through `font.render()`, which sets up the canvas state for you. Both draw with the same family name.
 
 ### Bitmap — `load(name, config)`
 
@@ -96,11 +76,11 @@ const ink = await Font.load("Ink", {
 | `colors` | `string` \| `string[]` | — | The glyph body color(s) that `render()`'s `color` tint replaces; every other pixel (shadows, outlines, bevels) is left untouched |
 | `caseInsensitive` | `boolean` | `false` | When rendering, fall back to the other case if a character has no glyph |
 
+Exactly one slicing strategy is required — `gridX`/`gridY` **or** `separator`. Both, neither, or a single grid axis throw a descriptive error.
+
 `background` lets you use older font images that have an opaque background instead of transparency. Its color is ignored during slicing (so it doesn't inflate glyph boxes) and cleared from each sliced glyph — so nothing draws as a black block, and `render()`'s `color` tinting hits only the actual glyph shape. `caseInsensitive` is for fonts that contain a single case: with it on, `"Hello world"` renders correctly from a `characters` set that only has `"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:"`.
 
 `colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
-
-Exactly one slicing strategy is required — `gridX`/`gridY` **or** `separator`. Both, neither, or a single grid axis throw a descriptive error.
 
 #### Grid slicing
 
@@ -120,6 +100,8 @@ Here's a real grid font — `spr_font.png`, a `10 × 11` grid of `12 × 12` cell
 
 <img src="/spr_font.png" alt="spr_font.png — a 10 × 11 grid of glyphs" width="480" class="pixel-art" />
 
+> Source: [Hello My Old Friend](https://lotovik.itch.io/hello-my-old-friend) by lotovik.
+
 ```js
 const font = await Font.load("spr", {
   image: "assets/spr_font.png",
@@ -132,7 +114,7 @@ const font = await Font.load("spr", {
 font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 ```
 
-`spr_font.png`'s glyphs carry a light-gray drop shadow, so when tinting this font list the glyph body's colors in a `colors` option — the shadow is then left untouched (see the option table below).
+`spr_font.png`'s glyphs carry a light-gray drop shadow, so when tinting this font list the glyph body's colors in a `colors` option — the shadow is then left untouched (see the option table above).
 
 #### Separator slicing
 
@@ -154,88 +136,6 @@ const font = await Font.load("Sep", {
 
 font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 ```
-
-### Drawing with a bitmap font
-
-A **`BitmapFont`** draws and measures itself:
-
-| Member | Type | Meaning |
-|--------|------|---------|
-| `name` | `string` | The registry key |
-| `kind` | `string` | `"bitmap"` |
-| `render(ctx, text, x, y, opts?)` | | Draw `text` at `(x, y)` on a 2D context |
-| `measure(text, opts?)` | | `{ width, height }` in pixels |
-
-`render()` options:
-
-| Option | Type | Default | Meaning |
-|--------|------|---------|---------|
-| `scale` | `number` | `1` | Multiply every glyph's size and advance |
-| `color` | `string` | — | Tint the glyphs (any CSS color). Opaque source pixels become this color |
-| `align` | `string` | `"left"` | `"left"`, `"center"`, or `"right"` |
-
-```js
-const ink = await Font.load("Ink", { /* … */ });
-
-ink.measure("Score 100");              // { width: 72, height: 8 } at scale 1
-ink.render(ctx, "Score 100", 10, 60, { scale: 2 });              // 2× size
-ink.render(ctx, "GAME OVER", 160, 60, { align: "center", color: "#ff0000" });
-```
-
-`measure(text, { scale })` mirrors `render()`'s geometry, so centering and right-aligning are exact. Characters missing from the image are skipped (their advance still applies), and the space advance comes from `spaceWidth` or the widest glyph.
-
-### Bitmap glyphs
-
-A bitmap glyph is represented by a **glyph record**: renderable region data plus font metrics. It is not an image object:
-
-> **`BitmapFont` exposes glyph records, not glyph images. A glyph record contains a source region and font metrics. The source region may currently reference an individual glyph canvas, but the contract also supports multiple glyphs sharing a single atlas. Consumers must depend only on the region/metrics contract.**
-
-```js
-const glyph = font.glyph("A");   // { region, advance, offsetX, offsetY }
-
-glyph.region;     // { sourceImage, sx, sy, sw, sh } — what to draw and where to cut it
-glyph.advance;    // how far the next glyph moves — includes the font's `spacing`
-glyph.offsetX;    // layout offset of the glyph box from the advance cursor
-glyph.offsetY;    // vertical layout offset of the glyph box
-```
-
-`font.glyph(ch)` and `font.getGlyph(ch)` return the same stable record (no allocation per call); `font.getTintedGlyph(ch, color)` returns the same shape with the glyph body recolored — tinting produces **another glyph record**, not a parallel canvas API. The record's `region` is an `AtlasRegion`, the same region shape sprite sheets use. Its `sourceImage` is whatever the font provider backs the glyph with.
-
-Today the bitmap font stores one small canvas per glyph, so each region is:
-
-```js
-{ sourceImage: glyphCanvas, sx: 0, sy: 0, sw: glyphCanvas.width, sh: glyphCanvas.height }
-```
-
-That is an **implementation detail of the font provider**, not part of the contract. An atlas-backed font can instead return every glyph's region pointing into one shared source:
-
-```js
-{ sourceImage: fontAtlas, sx: 32, sy: 16, sw: 8, sh: 12 }
-```
-
-— with **no changes** to `TextLayout`, `TextRasterizer`, `TextSystem`, or the public `Text` API. Callers should treat the glyph record, not the canvas, as the API.
-
-Glyph records flow through the text pipeline as stable font-resource data: layout consumes the metrics (and stores the records), rasterization consumes each record's region. The intended architecture:
-
-```text
-BitmapFont
-    ↓
-GlyphRecord
-    ↓
-    ├── TextRasterizer
-    │       ↓
-    │   cached text surface      ← the rasterized Text of today
-    │
-    └── GlyphRenderer            ← future work
-            ↓
-        glyph instances
-        ↓
-        atlas
-        ↓
-        batched rendering
-```
-
-The second branch — rendering individual glyphs from an atlas — is explicitly **future work**. This contract is what makes it an implementation detail of the font rather than a redesign of `Text`: `Text` (see [the Text facade](text.md)) reads `region` + `advance`, rasterizes the whole string into one cached surface, and never depends on how the font stores glyphs.
 
 ### Batch loading
 
@@ -274,6 +174,98 @@ const ink = await Font.load({
 ```
 
 A `LoadingTask` exposes `promise`, `progress` (`0`–`1`), `loaded`, `total`, and `onProgress(cb)`.
+
+## Drawing with a bitmap font
+
+A **`BitmapFont`** draws and measures itself:
+
+| Member | Type | Meaning |
+|--------|------|---------|
+| `name` | `string` | The registry key |
+| `kind` | `string` | `"bitmap"` |
+| `render(ctx, text, x, y, opts?)` | | Draw `text` at `(x, y)` on a 2D context |
+| `measure(text, opts?)` | | `{ width, height }` in pixels |
+
+`render()` options:
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `scale` | `number` | `1` | Multiply every glyph's size and advance |
+| `color` | `string` | — | Tint the glyphs (any CSS color). Opaque source pixels become this color |
+| `align` | `string` | `"left"` | `"left"`, `"center"`, or `"right"` |
+
+```js
+const ink = await Font.load("Ink", { /* … */ });
+
+ink.measure("Score 100");              // { width: 72, height: 8 } at scale 1
+ink.render(ctx, "Score 100", 10, 60, { scale: 2 });              // 2× size
+ink.render(ctx, "GAME OVER", 160, 60, { align: "center", color: "#ff0000" });
+```
+
+`measure(text, { scale })` mirrors `render()`'s geometry, so centering and right-aligning are exact. Characters missing from the image are skipped (their advance still applies), and the space advance comes from `spaceWidth` or the widest glyph.
+
+## Drawing with a native font
+
+A **`NativeFont`** draws and measures itself with the same options shape a bitmap font uses, plus a font size:
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `size` | `number` | `16` | Font size in pixels |
+| `scale` | `number` | `1` | Multiply the size (`final px = size × scale`) |
+| `color` | `string` | `"#000000"` | Text color (any CSS color) |
+| `align` | `string` | `"left"` | `"left"`, `"center"`, or `"right"` |
+| `baseline` | `string` | `"top"` | Canvas `textBaseline` for `render()` |
+
+```js
+const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+
+pixel.render(ctx, "Hello", 10, 40, { color: "#ffffff", size: 24 });
+pixel.measure("Hello", { size: 24 });     // { width, height } in pixels
+```
+
+`render()` sets `ctx.font` from the family and size, then draws with `fillText`. If you'd rather drive the canvas yourself, the same family works directly: `ctx.font = "24px Pixel"`; `ctx.fillText(...)`.
+
+## Text — retained, world-space text
+
+When the text should behave like a sprite — follow the camera, sort by `layer`/`depth`, interpolate, and stay cached instead of redrawn every frame — use the [`Text`](text.md) entity instead of drawing in `render()`:
+
+```js
+const label = new Text(350, 100, "spr", "SCORE 0");
+label.color = "#ffe600";
+label.align = "center";
+```
+
+`Text` accepts either font kind:
+
+| Font | `renderMode: "glyph"` | `renderMode: "raster"` |
+|------|:---:|:---:|
+| `BitmapFont` | ✓ | ✓ |
+| `NativeFont` | ✗ | ✓ |
+
+A bitmap font works in both modes. A native font works in **raster** mode: the string is measured once and cached as an image, then drawn as one unit every frame — ideal for labels that change rarely:
+
+```js
+const label = new Text(350, 100, "Pixel", "SCORE 0", {
+  renderMode: "raster",   // or TextRenderMode.RASTERIZED
+});
+```
+
+The default mode is `"glyph"`, which a native font does not support, so the raster mode must be requested explicitly — a bare `new Text(0, 0, "Pixel", "SCORE 0")` throws. See [the Text facade](text.md#fonts--bitmap-and-native) for the full picture.
+
+## Bitmap glyphs
+
+A bitmap font's glyphs are **regions** — the same region shape sprite frames use — paired with the metrics needed to place them. You rarely need them; they exist for custom per-glyph drawing:
+
+```js
+const glyph = font.glyph("A");   // { region, advance, offsetX, offsetY }
+
+glyph.region;   // { sourceImage, sx, sy, sw, sh } — what to draw and where to cut it
+glyph.advance;  // how far the next glyph moves — includes the font's `spacing`
+glyph.offsetX;  // horizontal offset of the glyph box from the advance cursor
+glyph.offsetY;  // vertical offset of the glyph box
+```
+
+`font.glyph(ch)` returns the same stable object every call (no allocation per call); `font.getGlyph(ch)` is the same accessor, and `font.getTintedGlyph(ch, color)` returns the same shape with the glyph body recolored. A glyph's `region` behaves like any sprite region, so you can hand it to anything that accepts an image.
 
 ## `Font.get` / `has` / `remove` / `clear`
 
