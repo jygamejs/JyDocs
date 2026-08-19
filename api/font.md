@@ -101,6 +101,8 @@ font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 
 `background` lets you use older font images that have an opaque background instead of transparency. Its color is ignored during slicing (so it doesn't inflate glyph boxes) and cleared from each sliced glyph — so nothing draws as a black block, and `render()`'s `color` tinting hits only the actual glyph shape. `caseInsensitive` is for fonts that contain a single case: with it on, `"Hello world"` renders correctly from a `characters` set that only has `"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:"`.
 
+Because these glyphs are trimmed tight to their opaque pixels — no extra margin or transparent space around each one — `spacing` is what adds the gap between them. That's the `spacing: 2` in the example above.
+
 #### Grid slicing
 
 The image is a uniform grid. `characters` are assigned left → right, top → bottom, and must fit within `gridX × gridY` cells:
