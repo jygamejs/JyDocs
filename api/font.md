@@ -105,9 +105,7 @@ font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 
 The image is a uniform grid. `characters` are assigned left → right, top → bottom, and must fit within `gridX × gridY` cells:
 
-`colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
-
-Here's a real grid font that needs it — `grid.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set. Its glyphs carry a light-gray drop shadow, so the `colors` option is exactly what keeps the shading intact when tinting:
+Here's a real grid font — `grid.png`, a `10 × 11` grid of `12 × 12` cells covering the full 110-character set:
 
 <img src="/grid.png" alt="grid.png — a 10 × 11 grid of glyphs" width="480" class="pixel-art" />
 
@@ -124,6 +122,8 @@ const font = await Font.load("spr", {
 
 font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 ```
+
+`colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
 
 ### Batch loading
 
