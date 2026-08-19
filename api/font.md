@@ -80,6 +80,29 @@ Exactly one slicing strategy is required — `gridX`/`gridY` **or** `separator`.
 
 `background` lets you use older font images that have an opaque background instead of transparency. Its color is ignored during slicing (so it doesn't inflate glyph boxes) and cleared from each sliced glyph — so nothing draws as a black block, and `render()`'s `color` tinting hits only the actual glyph shape. `caseInsensitive` is for fonts that contain a single case: with it on, `"Hello world"` renders correctly from a `characters` set that only has `"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:"`.
 
+#### Separator slicing
+
+A vertical line of the `separator` color divides glyphs, like a sprite sheet separated by colored gutters. The engine finds the content bounds, splits at every separator column, and trims each glyph to its opaque pixels — so glyphs of different widths work naturally. The number of glyphs found must equal `characters.length`.
+
+`font.png` is a real font that needs the whole package above: one old-style row of red glyphs sitting on an opaque black background, divided by `rgb(127, 127, 127)` gutters:
+
+<img src="/font.png" alt="font.png — red glyphs separated by rgb(127, 127, 127) divider columns" width="633" class="pixel-art" />
+
+```js
+const font = await Font.load("Sep", {
+  image: "font.png",
+  characters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:",
+  separator: "#7F7F7F",   // the gray gutters between glyphs
+  background: "#000000",  // the font's opaque background, treated as transparent
+  caseInsensitive: true,  // "Hello, World!" renders from the uppercase-only set
+  spacing: 2,             // extra pixels between glyphs
+});
+
+font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
+```
+
+`background` clears the opaque black so nothing draws as a block, `separator` turns the gray gutters into gaps, and `caseInsensitive` is what lets the uppercase-only `characters` set still render `"Hello, World!"`.
+
 `colors` is for fonts whose glyphs carry shading (a drop shadow, an outline, a bevel). By default tinting recolors every opaque pixel, which would flatten the shading into a solid shape — listing the glyph body's colors instead tells the engine exactly which pixels to touch, so the shading survives tinting no matter how many colors it uses. A single color can be given as a bare string (`colors: "#FF0000"`) instead of an array.
 
 #### Grid slicing
@@ -115,27 +138,6 @@ font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
 ```
 
 `spr_font.png`'s glyphs carry a light-gray drop shadow, so when tinting this font list the glyph body's colors in a `colors` option — the shadow is then left untouched (see the option table above).
-
-#### Separator slicing
-
-A vertical line of the `separator` color divides glyphs, like a sprite sheet separated by colored gutters. The engine finds the content bounds, splits at every separator column, and trims each glyph to its opaque pixels — so glyphs of different widths work naturally. The number of glyphs found must equal `characters.length`.
-
-Here's a real font made this way — `font.png`, one row of 4-pixel-wide red glyphs separated by `rgb(127, 127, 127)` gutters:
-
-<img src="/font.png" alt="font.png — red glyphs separated by rgb(127, 127, 127) divider columns" width="633" class="pixel-art" />
-
-```js
-const font = await Font.load("Sep", {
-  image: "font.png",
-  characters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!,[]:",
-  separator: "#7F7F7F",   // the gray gutters between glyphs
-  background: "#000000",  // the font's opaque background, treated as transparent
-  caseInsensitive: true,  // "Hello, World!" renders from the uppercase-only set
-  spacing: 2,             // extra pixels between glyphs
-});
-
-font.render(ctx, "Hello, World!", 350, 100, { scale: 3, color: "#ffe600" });
-```
 
 ### Batch loading
 
