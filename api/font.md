@@ -39,19 +39,37 @@ The same call handles both kinds. Give a name + a path for a native font, or a n
 const font = await Font.load("Pixel", "assets/fonts/pixel.ttf");
 ```
 
-Loading registers the family with the browser (awaiting its `FontFace` load). The returned **`NativeFont`** is a thin descriptor — draw with the canvas API directly:
+Loading registers the family with the browser (awaiting its `FontFace` load), so **after the `await`, the font is ready** to measure and rasterize — no extra readiness step. The returned **`NativeFont`** is a thin descriptor:
 
 | Member | Type | Meaning |
 |--------|------|---------|
 | `name` | `string` | The registry key you loaded it under |
 | `kind` | `string` | `"native"` |
 | `family` | `string` | The font family name (= `name`) for `ctx.font` |
+| `render(ctx, text, x, y, opts?)` | | Draw `text` at `(x, y)` on a 2D context |
+| `measure(text, opts?)` | | `{ width, height }` in pixels |
+| `capabilities` | `{ glyph, raster }` | `{ glyph: false, raster: true }` — retained `Text` render modes the font supports |
+
+A `NativeFont` draws with the canvas text API directly, or through the same options shape `BitmapFont` uses:
 
 ```js
 const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
-ctx.font = `24px ${pixel.family}`;
-ctx.fillText("Hello", 10, 40);
+
+pixel.render(ctx, "Hello", 10, 40, { color: "#ffffff", size: 24 });   // ctx.font + fillText
+pixel.measure("Hello", { size: 24 });                                  // { width, height }
 ```
+
+`render()` / `measure()` options:
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `size` | `number` | `16` | Font size in pixels |
+| `scale` | `number` | `1` | Multiply the size (`final px = size × scale`) |
+| `color` | `string` | `"#000000"` | Text color (any CSS color) |
+| `align` | `string` | `"left"` | `"left"`, `"center"`, or `"right"` |
+| `baseline` | `string` | `"top"` | Canvas `textBaseline` for `render()` |
+
+Native fonts also work with **retained `Text`** in raster mode — `new Text(x, y, "Pixel", "SCORE 0", { renderMode: "raster" })` measures the string with Canvas2D text metrics and rasterizes it into the same cached text surface a rasterized bitmap font produces (see [the Text facade](text.md#fonts--bitmap-and-native)). The default `TextRenderMode.GLYPH` is not supported by native fonts, so the raster mode must be requested explicitly.
 
 ### Bitmap — `load(name, config)`
 
