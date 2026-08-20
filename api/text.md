@@ -63,7 +63,7 @@ The optional `options` object applies initial styling in one call:
 | `scale` | `number` \| `{ x, y }` | `1` | Uniform or per-axis scale of the text |
 | `fontSize` | `number` | `16` | Logical pixel size for **native** retained text — the size the text is drawn at before `scale`. Ignored by bitmap fonts (their glyphs are a fixed pixel size) |
 | `visible` | `boolean` | `true` | Start hidden or shown |
-| `renderMode` | `"glyph"` \| `"raster"` \| `TextRenderMode` | `TextRenderMode.GLYPH` | The rendering representation — see [Rendering representations](#rendering-representations) |
+| `renderMode` | `"glyph"` \| `"raster"` \| `TextRenderMode` | auto | The rendering representation — chosen automatically from the font (`glyph` for bitmap, `raster` for native) unless given explicitly — see [Rendering representations](#rendering-representations) |
 
 ```js
 const title = new Text(400, 50, font, "LEVEL 1", {
@@ -84,35 +84,36 @@ const title = new Text(400, 50, font, "LEVEL 1", {
 
 ```js
 const ink = await Font.load("Ink", { image: "ink.png", characters: "…", gridX: 16, gridY: 4 });
-new Text(0, 0, ink, "Score: 0");                                     // ok — glyph (default)
-new Text(0, 0, ink, "Score: 0", { renderMode: "raster" });            // ok — raster
+new Text(0, 0, ink, "Score: 0");                                     // ok — auto: bitmap → glyph
+new Text(0, 0, ink, "Score: 0", { renderMode: "raster" });            // ok — explicit raster
 
 const native = await Font.load("System", "Inter.ttf");
-new Text(0, 0, native, "Score: 0");                                   // throws — default is glyph
-new Text(0, 0, native, "Score: 0", { renderMode: "raster" });         // ok — raster
+new Text(0, 0, native, "Score: 0");                                   // ok — auto: native → raster
+new Text(0, 0, native, "Score: 0", { renderMode: "raster" });         // ok — explicit raster
 new Text(0, 0, native, "Score: 0", { renderMode: "glyph" });
 // Error: Text: font "System" does not support render mode "glyph".
 ```
 
-The default render mode stays `GLYPH`, so a native font needs the explicit `renderMode: "raster"` (or `TextRenderMode.RASTERIZED`) opt-in. A font that was never loaded throws too: `Text: font "nope" not found. Load it with Font.load() before creating Text.`
+Without a `renderMode` option the mode is chosen **automatically** from the font: a bitmap font defaults to `GLYPH`, a native font (which cannot render per-glyph) to `RASTERIZED`. An explicit `renderMode` is a deliberate override — such as a bitmap font in raster mode — and is validated like any other; an unsupported combination throws. A font that was never loaded throws too: `Text: font "nope" not found. Load it with Font.load() before creating Text.`
 
 Native fonts still work through the immediate `Font.render(ctx, text, x, y, options)` inside `renderUI(ctx)` / `render(ctx)` for pure UI text that doesn't need an entity.
 
 ## Rendering representations
 
-`Text` renders in one of two representations, selected with `text.renderMode`. The value accepts a string name or its `TextRenderMode` constant — the string resolves to the constant automatically:
+`Text` renders in one of two representations, selected with `text.renderMode`. Without an explicit `renderMode`, the mode is chosen automatically from the font — `"glyph"` for a bitmap font, `"raster"` for a native font. The value accepts a string name or its `TextRenderMode` constant — the string resolves to the constant automatically:
 
 | Value | Constant | Meaning |
 |-------|----------|---------|
-| `"glyph"` | `TextRenderMode.GLYPH` (**default**) | Each character stays an individually drawable unit. Best for text that will animate per character. `GLYPH` is value `0`, so it is what a bare `new Text(...)` gets. |
+| `"glyph"` | `TextRenderMode.GLYPH` | Each character stays an individually drawable unit. Best for text that will animate per character. |
 | `"raster"` / `"rasterized"` | `TextRenderMode.RASTERIZED` | The whole string is composed into a single image before drawing. Best for static or infrequently changing text; least render work — one drawable. |
 
 ```js
 import { Text, TextRenderMode } from "jygame";
 
-const dynamic = new Text(100, 150, font, "Level 1");            // glyph (default)
+const dynamic = new Text(100, 150, font, "Level 1");            // bitmap font → glyph (auto)
+const nativeLabel = new Text(100, 120, "Pixel", "Score: 0");    // native font → raster (auto)
 const staticLabel = new Text(100, 100, font, "Score: 0", {
-  renderMode: "raster",                                          // or TextRenderMode.RASTERIZED
+  renderMode: "raster",                                          // explicit — or TextRenderMode.RASTERIZED
 });
 
 dynamic.renderMode = "glyph";      // same as TextRenderMode.GLYPH

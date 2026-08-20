@@ -232,15 +232,16 @@ label.align = "center";
 | `BitmapFont` | ✓ | ✓ |
 | `NativeFont` | ✗ | ✓ |
 
-A bitmap font works in both modes. A native font works in **raster** mode: the string is measured once and cached as an image, then drawn as one unit every frame — ideal for labels that change rarely:
+A bitmap font works in both modes. A native font works in **raster** mode: the string is measured once and cached as an image, then drawn as one unit every frame — ideal for labels that change rarely. Without an explicit `renderMode`, the mode is chosen automatically: a bitmap font defaults to `"glyph"`, a native font to `"raster"`. Explicitly requesting `"glyph"` with a native font throws:
 
 ```js
-const label = new Text(350, 100, "Pixel", "SCORE 0", {
-  renderMode: "raster",   // or TextRenderMode.RASTERIZED
+const label = new Text(350, 100, "Pixel", "SCORE 0");     // auto → raster (native font)
+const bitmapRaster = new Text(350, 100, "Ink", "SCORE 0", {
+  renderMode: "raster",                                    // explicit — bitmap + raster
 });
 ```
 
-The default mode is `"glyph"`, which a native font does not support, so the raster mode must be requested explicitly — a bare `new Text(0, 0, "Pixel", "SCORE 0")` throws. See [the Text facade](text.md#fonts--bitmap-and-native) for the full picture.
+See [the Text facade](text.md#fonts--bitmap-and-native) for the full picture.
 
 ## Bitmap glyphs
 
