@@ -18,7 +18,7 @@ player.scale = 2;
 player.velocity.x = 120;
 ```
 
-A sprite is whatever you point it at — a single image, a frame of an animation, a rectangle cut out of an atlas — or a solid shape with no image at all. Its `x`/`y` is the **top-left corner**; the entity rotates and scales around its center.
+A sprite is whatever you point it at — a single image, a frame of an animation, a rectangle cut out of an atlas — or a solid shape with no image at all. Its `x`/`y` is the **top-left corner**, and it stays the top-left corner through every size change: image resolution, `scale`, and explicit `width`/`height` all grow the sprite from that corner. Rotation pivots around the center.
 
 ## The essentials
 
@@ -53,7 +53,7 @@ const box  = new Sprite(200, 200, 50, 60);              // solid shape, no image
 
 `image` can be a URL string, an `HTMLImageElement`, a canvas, an atlas region from [`Image.atlas`](image.md#building-atlases-—-image-atlas-config), or a **name** — if the name matches a registered animation set, the sprite adopts every clip automatically (see [Named sets & sprites](image.md#named-sets-sprites)). Passing `w`/`h` fixes the collider to that size; later scaling will not resize it.
 
-`x`/`y` are the sprite's **top-left corner**. Internally the entity transform tracks the center (`x + width/2`), so rotation and scale pivot around the middle of the sprite — not the corner.
+`x`/`y` are the sprite's **top-left corner**. Internally the entity transform tracks the center (`x + width/2`); rotation pivots around that center, while size changes keep the top-left fixed.
 
 ## Image
 
@@ -96,7 +96,7 @@ A circle is inscribed in the sprite's box: its radius is half the smaller dimens
 |--------|------|---------|
 | `x`, `y` | `number` | Top-left position (get/set) |
 | `angle` | `number` | Rotation in radians around the center |
-| `scale` | `number` \| `{ x, y }` | Uniform or per-axis scale around the center |
+| `scale` | `number` \| `{ x, y }` | Uniform or per-axis scale — grows from the top-left |
 | `transform` | `object` | The raw `{ x, y, rotation, scaleX, scaleY }` view (get/set) |
 
 ```js
