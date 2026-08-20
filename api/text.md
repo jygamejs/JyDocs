@@ -141,9 +141,9 @@ label.color = null;          // back to the glyphs as sliced from the font image
 label.color;                 // null
 ```
 
-Unset (default) and explicitly-`null` are the same state: the font's own pixels, no tint. Every other value — including `"#ffffff"` — is a real override, so you *can* force pure-white text from a colored font.
+Unset (default) and explicitly-`null` are the same state: the font's own pixels, no tint.
 
-For a **native** font the color is applied directly while drawing — there are no glyph pixels to tint, so `"#ffffff"` genuinely produces white, and `color = null` falls back to the default white text. A color change re-renders the text without re-measuring it.
+For a **native** font the color is applied directly while drawing — there are no glyph pixels to tint, so `color = null` falls back to the default text color. A color change re-renders the text without re-measuring it.
 
 ### `align`
 
