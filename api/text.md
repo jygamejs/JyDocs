@@ -30,7 +30,7 @@ Once created, the text exists in the scene until you `destroy()` it. You mutate 
 | `new Text(x, y, font, content)` | Create a text entity at `(x, y)` using a loaded font |
 | `text.value = "..."` | Change the string |
 | `text.color` / `text.align` / `text.letterSpacing` | Style it |
-| `text.renderMode` | Choose the rendering representation — see [Rendering representations](#rendering-representations) |
+| `text.renderMode` | Choose the rendering representation — see [Fonts — bitmap and native](#fonts--bitmap-and-native) |
 
 ```js
 const score = new Text(400, 30, font, "SCORE 0");
@@ -63,7 +63,7 @@ The optional `options` object applies initial styling in one call:
 | `scale` | `number` \| `{ x, y }` | `1` | Uniform or per-axis scale of the text |
 | `fontSize` | `number` | `16` | Logical pixel size for **native** retained text — the size the text is drawn at before `scale`. Ignored by bitmap fonts (their glyphs are a fixed pixel size) |
 | `visible` | `boolean` | `true` | Start hidden or shown |
-| `renderMode` | `"glyph"` \| `"raster"` | auto | The rendering representation — chosen automatically from the font (`glyph` for bitmap, `raster` for native) unless given explicitly — see [Rendering representations](#rendering-representations) |
+| `renderMode` | `"glyph"` \| `"raster"` | auto | The rendering representation — chosen automatically from the font (`glyph` for bitmap, `raster` for native) unless given explicitly — see [Fonts — bitmap and native](#fonts--bitmap-and-native) |
 
 ```js
 const title = new Text(400, 50, font, "LEVEL 1", {
@@ -82,6 +82,13 @@ const title = new Text(400, 50, font, "LEVEL 1", {
 | `BitmapFont` | ✓ | ✓ |
 | `NativeFont` | ✗ | ✓ |
 
+The two modes differ in how the string is drawn:
+
+| Value | Meaning |
+|-------|---------|
+| `"glyph"` | Each character is drawn individually. More render work, but the natural choice for text that changes often. |
+| `"raster"` / `"rasterized"` | The whole string is composed into a single image once, then drawn as one unit. The least render work — best for static or rarely changing text. |
+
 ```js
 const ink = await Font.load("Ink", { image: "ink.png", characters: "…", gridX: 16, gridY: 4 });
 new Text(0, 0, ink, "Score: 0");                                     // ok — auto: bitmap → glyph
@@ -93,29 +100,9 @@ new Text(0, 0, native, "Score: 0", { renderMode: "glyph" });
 // Error: Text: font "System" does not support render mode "glyph".
 ```
 
-Without a `renderMode` option the mode is chosen **automatically** from the font: a bitmap font defaults to `"glyph"`, a native font (which cannot render per-glyph) to `"raster"`. An explicit `renderMode` is a deliberate override — such as a bitmap font in raster mode — and is validated like any other; an unsupported combination throws. A font that was never loaded throws too: `Text: font "nope" not found. Load it with Font.load() before creating Text.`
+Without a `renderMode` option the mode is chosen **automatically** from the font: a bitmap font defaults to `"glyph"`, a native font (which cannot render per-glyph) to `"raster"`. An explicit `renderMode` is a deliberate override — such as a bitmap font in raster mode — and is validated like any other; an unsupported combination throws. Switching an existing text at any time is equally cheap — `text.renderMode = "raster"` never re-renders the text. A font that was never loaded throws too: `Text: font "nope" not found. Load it with Font.load() before creating Text.`
 
 Native fonts still work through the immediate `Font.render(ctx, text, x, y, options)` inside `renderUI(ctx)` / `render(ctx)` for pure UI text that doesn't need an entity.
-
-## Rendering representations
-
-`Text` renders in one of two ways, selected with `text.renderMode`:
-
-| Value | Meaning |
-|-------|---------|
-| `"glyph"` | Each character is drawn individually. More render work, but the natural choice for text that changes often. |
-| `"raster"` / `"rasterized"` | The whole string is composed into a single image once, then drawn as one unit. The least render work — best for static or rarely changing text. |
-
-```js
-const score = new Text(400, 30, font, "SCORE 0");        // bitmap font → glyph (auto)
-const title = new Text(400, 50, font, "LEVEL 1", {
-  renderMode: "raster",                                   // explicit — a deliberate choice
-});
-
-score.renderMode = "raster";   // switch at any time
-```
-
-Both modes come from the same font and differ only in how the string is drawn. Switching `renderMode` is cheap — it never re-renders the text. A native font is raster-only (see [Fonts — bitmap and native](#fonts--bitmap-and-native)).
 
 ## Changing the string — `value`, `text`, `string`
 
