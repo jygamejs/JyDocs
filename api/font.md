@@ -47,7 +47,7 @@ Loading registers the family with the browser (awaiting its `FontFace` load), so
 | `family` | `string` | The font family name (= `name`) — the value used in `ctx.font` |
 | `render(ctx, text, x, y, opts?)` | | Draw `text` at `(x, y)` on a 2D context |
 | `measure(text, opts?)` | | `{ width, height }` in pixels |
-| `capabilities` | `{ glyph, raster }` | `{ glyph: false, raster: true }` — the retained [`Text`](#text--retained-world-space-text) render modes this font supports |
+| `capabilities` | `{ glyph, raster }` | `{ glyph: false, raster: true }` — which retained [`Text`](text.md) render modes this font supports |
 
 A native font can also be used with the canvas API directly — `ctx.font = "24px Pixel"` then `ctx.fillText(...)` — or through `font.render()`, which sets up the canvas state for you. Both draw with the same family name.
 
@@ -214,34 +214,6 @@ pixel.measure("Hello", { size: 24 });     // { width, height } in pixels
 ```
 
 `render()` sets `ctx.font` from the family and size, then draws with `fillText`. If you'd rather drive the canvas yourself, the same family works directly: `ctx.font = "24px Pixel"`; `ctx.fillText(...)`.
-
-## Text — retained, world-space text
-
-When the text should behave like a sprite — follow the camera, sort by `layer`/`depth`, interpolate, and stay cached instead of redrawn every frame — use the [`Text`](text.md) entity instead of drawing in `render()`:
-
-```js
-const label = new Text(350, 100, "spr", "SCORE 0");
-label.color = "#ffe600";
-label.align = "center";
-```
-
-`Text` accepts either font kind:
-
-| Font | `renderMode: "glyph"` | `renderMode: "raster"` |
-|------|:---:|:---:|
-| `BitmapFont` | ✓ | ✓ |
-| `NativeFont` | ✗ | ✓ |
-
-A bitmap font works in both modes. A native font works in **raster** mode: the string is measured once and cached as an image, then drawn as one unit every frame — ideal for labels that change rarely. Without an explicit `renderMode`, the mode is chosen automatically: a bitmap font defaults to `"glyph"`, a native font to `"raster"`. Explicitly requesting `"glyph"` with a native font throws:
-
-```js
-const label = new Text(350, 100, "Pixel", "SCORE 0");     // auto → raster (native font)
-const bitmapRaster = new Text(350, 100, "Ink", "SCORE 0", {
-  renderMode: "raster",                                    // explicit — bitmap + raster
-});
-```
-
-See [the Text facade](text.md#fonts--bitmap-and-native) for the full picture.
 
 ## Bitmap glyphs
 
