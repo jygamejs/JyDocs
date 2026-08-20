@@ -4,10 +4,10 @@ title: Text
 
 # Text
 
-`Text` is the retained, world-space text object. Where [`Font.render(ctx, ...)`](font.md#drawing-with-a-bitmap-font) draws immediately into a 2D context — screen-space, behind or above the world, with no z-order — a `Text` is an **entity**: it lives in the scene's ECS, sorts by `layer` and `depth` alongside sprites, interpolates with the render queue, and renders in one of two selectable representations — by default each glyph stays an individually renderable quad (see [Rendering representations](#rendering-representations)). It is the engine's answer to "text that behaves like every other renderable."
+`Text` is the retained, world-space text object. Where [`Font.render(ctx, ...)`](font.md#drawing-with-a-bitmap-font) draws immediately into a 2D context — screen-space, behind or above the world, with no z-order — a `Text` behaves like any other object in the scene: it follows the camera, sorts by `layer` and `depth` alongside sprites, interpolates, and re-renders itself automatically when you change it. It is the engine's answer to "text that behaves like every other renderable."
 
 ```js
-import { Game, Scene, Text, Font } from "jygame";
+import { Text, Font } from "jygame";
 
 const font = await Font.load("spr", {
   image: "grid.png",
@@ -21,7 +21,7 @@ label.color = "#ffe600";
 label.align = "center";
 ```
 
-Once created, the text exists in the world until you `destroy()` it. You mutate it through `.value`, `.color`, `.align`, and the engine redraws it — there is no draw call to issue in `render()` or `renderUI()`.
+Once created, the text exists in the scene until you `destroy()` it. You mutate it through `.value`, `.color`, `.align`, and the engine redraws it — there is no draw call to issue in `render()` or `renderUI()`.
 
 ## The essentials
 
@@ -40,65 +40,11 @@ score.align = "center";
 score.value = `SCORE ${points}`;
 ```
 
-A `Text` is not a canvas draw — it is a small ECS entity (a `Transform`, a `Renderable`, a `Visible`, and a `Text` component) that produces the rendered text from a shared cached layout, using either the rasterized or the glyph representation. Changing it is cheap: content and layout are cached, and the final representation is only rebuilt when something actually changed.
-
-## Rendering representations
-
-`Text` can be rendered using two representations, selected with `text.renderMode`. The value accepts a string name or its `TextRenderMode` constant — the string resolves to the constant automatically:
-
-| Value | Constant | Meaning |
-|-------|----------|---------|
-| `"glyph"` | `TextRenderMode.GLYPH` (**default**) | Glyphs remain individually renderable primitives. Best for animated text and effects that operate per character. `GLYPH` is value `0`, so it is what a bare `new Text(...)` gets. |
-| `"raster"` / `"rasterized"` | `TextRenderMode.RASTERIZED` | The text is composed into a single bitmap before rendering. Best for static or infrequently changing text; minimizes render work — one quad. |
-
-```js
-import { Text, TextRenderMode } from "jygame";
-
-const dynamic = new Text(100, 150, font, "Level 1");            // glyph (default)
-const staticLabel = new Text(100, 100, font, "Score: 0", {
-  renderMode: "raster",                                          // or TextRenderMode.RASTERIZED
-});
-
-dynamic.renderMode = "glyph";      // same as TextRenderMode.GLYPH
-staticLabel.renderMode = "raster"; // same as TextRenderMode.RASTERIZED
-```
-
-Both modes share the entire pipeline until the final representation: the same `Font`/`GlyphRecord` contract, the same `TextLayout` (positions, alignment, advances, offsets, width, height), the same `Transform`, `Renderable`, `Visible`, and `Text` API. They differ **only** in how the shared layout is drawn:
-
-```text
-Text
- │
- ├── BitmapFont → TextLayout (glyph records) ──┬── RASTERIZED → TextRasterizer
- │                                            └── GLYPH      → GlyphRenderer
- │
- └── NativeFont → TextLayout (text metrics) ──── RASTERIZED → TextRasterizer
-                                                          │
-                                              one cached surface
-                                                          │
-                                              one RenderQueue command
-```
-
-Both raster paths (bitmap and native) converge on the same `TextRasterizer` output — one cached surface, one textured quad.
-
-`TextLayout` has two measurement sources — glyph records + advances for a `BitmapFont`, Canvas2D text metrics for a `NativeFont` — and both refill the **same** layout structure, so a rasterized native `Text` is indistinguishable to the renderer from a rasterized bitmap `Text`: one cached surface, one textured quad. `GLYPH` mode is bitmap-only (per-glyph commands); a native font in glyph mode is rejected.
-
-Switching `renderMode` is cheap: it only selects the representation. It never rebuilds the layout or the rasterized surface — toggling back to `RASTERIZED` reuses the existing cached bitmap. Changing the layout (content, font, alignment, letter spacing, or — for native text — `fontSize`) invalidates both representations together; a color change invalidates the rasterized surface only.
-
-The glyph mode is what the engine needs for future **per-glyph animation** (typewriter effects, per-character reveal, wave or bounce, per-glyph color/rotation/scale). That animation is not implemented yet — this mode establishes the representation that will make it possible without another architectural split. Rasterized text optimizes for minimizing render work; glyph text optimizes for retaining per-glyph control.
-
-A native font in raster mode has the same trade-off as a rasterized bitmap font, but it costs more to rebuild: the browser rasterizes and the surface must be re-measured and re-drawn whenever the text or style changes. It is ideal for labels that change rarely (`"SCORE 0"`); for per-frame text prefer a bitmap font in glyph mode.
-
-```text
-NativeFont + RASTERIZED          BitmapFont + GLYPH
-  browser font rasterization       pre-baked glyph regions
-  cached as a text surface         per-glyph representation
-  one rendered quad                batched rendering
-  re-rasterizes on change          foundation for per-character animation
-```
+A `Text` is not a canvas draw — it's a scene object. Changing it is cheap: the rendered text is cached, and only rebuilt when something actually changed.
 
 ## `new Text(x, y, font, content, options)`
 
-Creates the entity in the scene's world. `font` is required and can be a **registered font name** or a `Font` instance; `content` defaults to `""`. The position is the text's **anchor** — the exact meaning depends on `align` (see [Alignment](#align)).
+Creates the text in the scene's world. `font` is required and can be a **registered font name** or a `Font` instance; `content` defaults to `""`. The position is the text's **anchor** — the exact meaning depends on `align` (see [Alignment](#align)).
 
 ```js
 const t = new Text(100, 100, "spr", "hello");   // by registered name
@@ -114,8 +60,8 @@ The optional `options` object applies initial styling in one call:
 | `letterSpacing` | `number` | `0` | Extra horizontal space between every glyph |
 | `layer` | `number` | `Layer.WORLD` | The render layer band |
 | `depth` | `number` | `0` | The sort value within the layer |
-| `scale` | `number` \| `{ x, y }` | `1` | Uniform or per-axis scale of the glyphs |
-| `fontSize` | `number` | `16` | Logical pixel size for **native** retained text — the size the text is rasterized at before `scale`. Ignored by bitmap fonts (their glyphs are a fixed pixel size) |
+| `scale` | `number` \| `{ x, y }` | `1` | Uniform or per-axis scale of the text |
+| `fontSize` | `number` | `16` | Logical pixel size for **native** retained text — the size the text is drawn at before `scale`. Ignored by bitmap fonts (their glyphs are a fixed pixel size) |
 | `visible` | `boolean` | `true` | Start hidden or shown |
 | `renderMode` | `"glyph"` \| `"raster"` \| `TextRenderMode` | `TextRenderMode.GLYPH` | The rendering representation — see [Rendering representations](#rendering-representations) |
 
@@ -141,7 +87,7 @@ const ink = await Font.load("Ink", { image: "ink.png", characters: "…", gridX:
 new Text(0, 0, ink, "Score: 0");                                     // ok — glyph (default)
 new Text(0, 0, ink, "Score: 0", { renderMode: "raster" });            // ok — raster
 
-const native = await Font.load("System", "/fonts/Inter.ttf");
+const native = await Font.load("System", "Inter.ttf");
 new Text(0, 0, native, "Score: 0");                                   // throws — default is glyph
 new Text(0, 0, native, "Score: 0", { renderMode: "raster" });         // ok — raster
 new Text(0, 0, native, "Score: 0", { renderMode: "glyph" });
@@ -151,6 +97,41 @@ new Text(0, 0, native, "Score: 0", { renderMode: "glyph" });
 The default render mode stays `GLYPH`, so a native font needs the explicit `renderMode: "raster"` (or `TextRenderMode.RASTERIZED`) opt-in. A font that was never loaded throws too: `Text: font "nope" not found. Load it with Font.load() before creating Text.`
 
 Native fonts still work through the immediate `Font.render(ctx, text, x, y, options)` inside `renderUI(ctx)` / `render(ctx)` for pure UI text that doesn't need an entity.
+
+## Rendering representations
+
+`Text` renders in one of two representations, selected with `text.renderMode`. The value accepts a string name or its `TextRenderMode` constant — the string resolves to the constant automatically:
+
+| Value | Constant | Meaning |
+|-------|----------|---------|
+| `"glyph"` | `TextRenderMode.GLYPH` (**default**) | Each character stays an individually drawable unit. Best for text that will animate per character. `GLYPH` is value `0`, so it is what a bare `new Text(...)` gets. |
+| `"raster"` / `"rasterized"` | `TextRenderMode.RASTERIZED` | The whole string is composed into a single image before drawing. Best for static or infrequently changing text; least render work — one drawable. |
+
+```js
+import { Text, TextRenderMode } from "jygame";
+
+const dynamic = new Text(100, 150, font, "Level 1");            // glyph (default)
+const staticLabel = new Text(100, 100, font, "Score: 0", {
+  renderMode: "raster",                                          // or TextRenderMode.RASTERIZED
+});
+
+dynamic.renderMode = "glyph";      // same as TextRenderMode.GLYPH
+staticLabel.renderMode = "raster"; // same as TextRenderMode.RASTERIZED
+```
+
+Both modes share the same font and the same geometry — they differ only in how the string is drawn. Switching `renderMode` is cheap: it only selects the representation, never rebuilds the text, and switching back to `"raster"` reuses the previously cached image. Changing the string, font, alignment, or letter spacing invalidates both representations together; a `color` change re-renders the image only.
+
+Glyph mode is the foundation for future **per-glyph animation** (typewriter effects, per-character reveal, wave or bounce, per-glyph color/rotation/scale). Rasterized text minimizes render work; glyph text keeps every character individually addressable.
+
+```text
+NativeFont + RASTERIZED          BitmapFont + GLYPH
+  browser font rasterization       pre-baked glyph regions
+  cached as an image               per-glyph representation
+  one drawable                     batched rendering
+  re-renders on change             foundation for per-character animation
+```
+
+A native font in raster mode costs more to rebuild than a bitmap font: the browser rasterizes the string, so the image is re-measured and re-drawn whenever the text or style changes. It is ideal for labels that change rarely (`"SCORE 0"`); for per-frame text prefer a bitmap font in glyph mode.
 
 ## Changing the string — `value`, `text`, `string`
 
@@ -168,13 +149,13 @@ label.text = "SCORE 120";    // same thing
 label.string = "SCORE 120";  // same thing
 ```
 
-Setting the value marks the text as changed, and the engine **re-rasterizes** the bitmap the next time the world updates. Rebuilding only happens on an actual change — if nothing touched the text, the cached bitmap is reused and one command is emitted.
+Setting the value marks the text as changed, and the engine redraws it the next time the world updates. Rebuilding only happens on an actual change — if nothing touched the text, the cached result is reused.
 
 ## Styling
 
 ### `color`
 
-The text color, as a hex string or number. It is an **explicit override**: the moment you set it, the glyphs are recolored to that color at rasterization time using the same tint machinery as `Font.render(ctx, { color })` — which means the font's `colors` option still applies: if the font defines which pixels are the glyph body, only those get recolored and shading is preserved.
+The text color, as a hex string or number. It is an **explicit override**: the moment you set it, the glyphs are recolored to that color using the same tinting as `Font.render(ctx, { color })` — which means the font's `colors` option still applies: if the font defines which pixels are the glyph body, only those get recolored and shading is preserved.
 
 ```js
 label.color = "#ffe600";     // hex string
@@ -189,9 +170,9 @@ label.color = null;          // back to the glyphs as sliced from the font image
 label.color;                 // null
 ```
 
-Unset (default) and explicitly-`null` are the same state: the font's own pixels, no tint. Every other value — including `"#ffffff"` — is a real override, so you *can* force pure-white text from a colored font:
+Unset (default) and explicitly-`null` are the same state: the font's own pixels, no tint. Every other value — including `"#ffffff"` — is a real override, so you *can* force pure-white text from a colored font.
 
-For a **native** font the color is baked straight into the raster surface's `fillStyle` — there are no glyph pixels to tint, so `"#ffffff"` genuinely produces white and `color = null` falls back to the default white text. A color change re-rasterizes the surface without rebuilding the layout.
+For a **native** font the color is applied directly while drawing — there are no glyph pixels to tint, so `"#ffffff"` genuinely produces white, and `color = null` falls back to the default white text. A color change re-renders the text without re-measuring it.
 
 ### `align`
 
@@ -217,11 +198,11 @@ Extra horizontal space added after every glyph, in pixels. Defaults to `0`. Usef
 title.letterSpacing = 2;
 ```
 
-For bitmap fonts it widens every glyph advance. Native fonts are measured as a single Canvas2D string, so `letterSpacing` only widens the advance used for centering/right-aligning — per-letter spacing is not applied to native text.
+For bitmap fonts it widens every glyph advance. Native fonts are measured as a single string, so `letterSpacing` only widens the advance used for centering/right-aligning — per-letter spacing is not applied to native text.
 
 ## Position & transform
 
-A `Text` carries a full `Transform`, so it moves, rotates, and scales like any entity. The transform's `(x, y)` is the **anchor** point the text aligns around — unlike a sprite, it is not the top-left corner and not the center by default; `align` decides.
+A `Text` moves, rotates, and scales like any scene object. The transform's `(x, y)` is the **anchor** point the text aligns around — unlike a sprite, it is not the top-left corner and not the center by default; `align` decides.
 
 | Member | Type | Meaning |
 |--------|------|---------|
@@ -235,11 +216,11 @@ label.angle += 0.01;          // spin around the anchor
 label.scale = { x: 2, y: 2 }; // or label.scale = 2
 ```
 
-Scale and rotation apply to the whole rasterized text as a unit at draw time — they never re-rasterize the bitmap, so a large `scale` scales the entire string (spacing included) without glyph overlap.
+Scale and rotation apply to the whole text as a unit at draw time — they never re-render it, so a large `scale` scales the entire string (spacing included) without glyph overlap.
 
 ## Layering
 
-Because the text is one `RenderQueue` command, it sorts with the same `(layer, depth)` keys as sprites — a `Text` can sit behind, between, or in front of sprites, and its `layer` picks the band: `Layer.WORLD` by default, `Layer.UI` for overlay text that should sit above gameplay. There is no "text is always on top" rule.
+A `Text` sorts with the same `(layer, depth)` keys as sprites, so it can sit behind, between, or in front of them, and its `layer` picks the band: `Layer.WORLD` by default, `Layer.UI` for overlay text that should sit above gameplay. There is no "text is always on top" rule.
 
 ```js
 label.depth = 5;          // draw above sprites at depth < 5 on this layer
@@ -248,14 +229,14 @@ label.layer = Layer.UI;   // or move it to the UI band entirely
 
 ## Measuring — `width`, `height`
 
-The laid-out text size, read back from the cached layout. `width` spans the whole string regardless of `align`; `height` is the tallest glyph in the string. For a native font both come from the measured Canvas2D text metrics (the ink box: `actualBoundingBoxLeft/Right` × `actualBoundingBoxAscent/Descent`), scaled by `fontSize`.
+The drawn text size. `width` spans the whole string regardless of `align`; `height` is the tallest glyph in the string. For a native font both come from the measured Canvas2D text metrics, scaled by `fontSize`.
 
 ```js
 label.width;    // e.g. 96 for "SCORE 0" at this font/scale
 label.height;   // e.g. 12
 ```
 
-Both are `0` while the text is empty. Note the size is the **glyph box** (or ink box) extent, not the font's line height.
+Both are `0` while the text is empty. Note the size is the glyph extent, not the font's line height.
 
 ## Visibility
 
@@ -267,102 +248,30 @@ Both are `0` while the text is empty. Note the size is the **glyph box** (or ink
 label.visible = false;   // hide, keep state
 ```
 
-Invisible text is skipped by the render system entirely — no command is emitted.
+Invisible text is skipped entirely — nothing is drawn.
+
+## Caching & re-rendering
+
+A `Text` caches what it draws. Nothing re-renders until something actually changes:
+
+| You change | What happens |
+|------------|--------------|
+| `value`, `font`, `align`, `letterSpacing`, `fontSize` | The text is re-measured and re-rendered |
+| `color` | Re-rendered with the new color — the measured size is unchanged |
+| `x`, `y`, `angle`, `scale`, `layer`, `depth`, `visible` | Nothing re-renders — applied at draw time |
+
+Unchanged text is therefore zero work: the cached result is drawn as-is. Because a `Text` lives in the same scene as sprites, it gets everything sprites get — `(layer, depth)` sorting, culling, interpolation between ticks, and pixel-perfect rounding.
 
 ## `world` & `entity`
 
-| Member | Type | Meaning |
-|--------|------|---------|
-| `world` | `World` | The ECS world the text lives in |
-| `entity` | `number` | The underlying entity id |
-
-Useful when you need the raw ECS row — e.g. to add extra components to the text's entity, or to query it from a custom system.
+Every `Text` is backed by an ECS entity. `text.world` is the world it lives in and `text.entity` its entity id. You rarely need them; they exist for advanced cases like attaching extra components to the same entity or reading the text from your own systems.
 
 ## `destroy()`
 
-Removes the text from the world and returns its pooled content slot for reuse. After `destroy()`, any access to the text throws.
+Removes the text and frees its resources. After `destroy()`, any access to the text throws.
 
 ```js
 label.destroy();
 ```
 
-A `Text` created inside a scene is cleaned up with the scene's world; `destroy()` is for removing an individual label early. Destroying the entity through the ECS directly releases the pool slot too.
-
-## How it works
-
-A `Text` entity renders in the representation its `renderMode` selects (see [Rendering representations](#rendering-representations)). In `RASTERIZED` mode it is **one texture, one region, one `RenderQueue` command** — however many glyphs it has. The whole string is rasterized into a single cached bitmap when its *visual* state changes, and that bitmap is drawn as one quad every frame after that. "Score: 0" and a page of dialogue each cost the renderer a single command. In `GLYPH` mode each glyph is its own command, batched by the renderers; both modes share the same cached layout. A **native** font in raster mode is exactly this too: the whole string is measured once and rasterized with a single `fillText`, then cached — the renderer never knows the surface came from a native font.
-
-Four pieces work together:
-
-- **`TextResourcePool`** — a handle-based pool owning each text's content, its cached **layout**, and its cached **rasterized surface**. Creating a `Text` allocates a slot; destroying it returns the slot (surface, layout, and content together) for reuse. Two versions are tracked per slot — the layout version and the surface version — so the two caches invalidate independently.
-- **`TextLayout`** — the renderer-independent layout stage. For a `BitmapFont` it consumes the font's **glyph records** (`getGlyph` — never a concrete image representation) and refills the cached layout in place: the stable glyph records, their surface-local positions, `drawX`, `width`, and `height`. For a `NativeFont` it measures the whole string with Canvas2D text metrics (`ctx.measureText` + `actualBoundingBox*`) and fills the **same** structure (`drawX`/`width`/`height` plus a surface-local `fillText` origin) — no per-character glyph record is fabricated. It performs no canvas drawing, so the same layout code works for individual glyph canvases, a shared atlas, or native text.
-- **`TextSystem`** — runs after the render queue is cleared (priority 4, after `RenderSystem`'s clear). For each visible text entity it:
-  1. recomputes the shared **layout** only when `Text.version` changed (content, font, alignment, letter spacing, or — for native text — `fontSize`);
-  2. dispatches to the representation chosen by `Text.renderMode`:
-     - **RASTERIZED** — re-rasterizes the **surface** only when `Text.surfaceVersion` changed (a color change or a fresh layout), then emits **exactly one** command;
-     - **GLYPH** — fills a reusable `GlyphBuffer` from the layout and emits one command per glyph (no surface involved).
-  3. `layer`/`depth`/`imageSmoothing` come from `Renderable`, the transform from `Transform`, plus interpolation endpoints — identical for both modes.
-- **`TextRasterizer`** — the one place text is drawn into the surface. For a bitmap font it consumes each layout placement's glyph record — its `region` (`sourceImage`, `sx`, `sy`, `sw`, `sh`) — so it never cares whether those regions point at individual canvases, a shared atlas, or anything else. For a native font it applies the font's canvas state (`ctx.font`) and draws the whole string with **one `fillText`** at the surface-local origin stored by the layout; color is the `fillStyle`, so white is a real color. Either way the output is the same cached bitmap surface, and the renderer never knows which font kind produced it.
-- **The font** — a `BitmapFont` is a **glyph record** per character: a renderable `region` (`{ sourceImage, sx, sy, sw, sh }`) plus `advance` (and `offsetX`/`offsetY`). Layout advances by `font.advance(ch) + letterSpacing`, honoring the font's `spacing` and `spaceWidth`; the region's `sourceImage` is whatever backs the glyph — an implementation detail of the font provider (see [Bitmap glyphs](font.md#bitmap-glyphs)). A `NativeFont` instead maps its stored family to Canvas2D font state through one internal method used by both its immediate `render()` and the retained rasterizer, so the two paths can never drift.
-
-Invalidation is per-visual-change, not per-mutation: `value`/`font`/`align`/`letterSpacing`/`fontSize` rebuild the shared layout (and therefore the rasterized surface); `color` rebuilds only the surface (positions are unchanged); `renderMode` rebuilds nothing — it only selects the representation; position/rotation/scale/layer/depth/visibility never rebuild anything — they are applied at draw time. Unchanged text is therefore zero work: in `RASTERIZED` mode the cached surface is reused and one command is emitted; in `GLYPH` mode the cached layout is refilled into the reusable glyph buffer.
-
-Because the text is one command in the same queue as sprites, everything sprites get applies to it: the `(layer, depth)` sort, culling, pixel-perfect rounding, interpolation between ticks, and — on the GPU backends — instanced quad batching. The renderers never see glyphs; they draw one texture, which is also why an atlas-backed font (all glyph regions sharing one source) or a future GPU-native font representation slots in with no changes to the Text API, the component, or the renderer.
-
-### The glyph-record contract and the glyph renderer
-
-The font ↔ layout ↔ renderer seam is a deliberate contract, not an accident:
-
-> **`BitmapFont` exposes glyph records, not glyph images. A glyph record contains a source region and font metrics. The source region may currently reference an individual glyph canvas, but the contract also supports multiple glyphs sharing a single atlas. Consumers must depend only on the region/metrics contract.**
-
-Two renderers consume those records, selected by `Text.renderMode`. A native font takes a parallel measurement path but converges on the **same cached surface**, so the renderer (and the RenderQueue) never knows which font kind produced a texture:
-
-```text
-BitmapFont                  NativeFont
-    ↓                           ↓
-GlyphRecord              Canvas2D text metrics
-    ↓                           ↓
-TextLayout ———————→ same layout target ←———————
-    ↓
-    ├── TextRasterizer            ← RASTERIZED mode
-    │       ↓
-    │   cached text surface       ← one RenderQueue command (either font kind)
-    │
-    └── GlyphRenderer             ← GLYPH mode (bitmap only)
-            ↓
-        glyph instances           ← per-glyph RenderQueue commands
-            ↓
-        batched rendering
-```
-
-The rasterized renderer copies each glyph region into the text surface (bitmap) or draws the whole string with one `fillText` (native); the glyph renderer submits each glyph region directly. The two representations have different strengths: **rasterized text** minimizes render work (one quad per string), while **glyph text** retains per-glyph control.
-
-What remains future work is **per-glyph animation** — typewriter effects, per-character reveal, wave/bounce, per-glyph color/rotation/scale — which will build directly on the glyph representation:
-
-```text
-TextLayout
-    ↓
-GlyphBuffer
-    ↓
-per-glyph animation        ← future work
-    ↓
-GPU instance data
-    ↓
-batched text rendering
-```
-
-The `renderMode` switch is the architectural seam that makes that possible without another redesign. When it lands, it is a change to the glyph path only — `TextLayout`, `TextRasterizer`, the `Text` component, and the public `Text` API are unaffected.
-
-## Reference
-
-These names are exported from `jygame`:
-
-| Export | Type | What it is |
-|--------|------|-----------|
-| `Text` | class | The facade you use — `new Text(x, y, font, content, options)` |
-| `TextComponent` | component | The SoA component schema (`fontHandle`, `contentHandle`, `align`, `letterSpacing`, `version`, `colorEnabled`, `surfaceVersion`, `renderMode`, `fontSize`) |
-| `TextRenderMode` | constants | `GLYPH` (0) and `RASTERIZED` (1) |
-| `TextSystem` | system | Coordinates layout + representation dispatch, emits the text's `RenderQueue` commands (priority 4) |
-| `TextResourcePool` | resource | The content/layout/surface pool, set as a world resource by `Text` |
-
-There is also a `Font.byId(id)` lookup on the [Font facade](font.md) that `TextSystem` uses to resolve a stored `fontHandle` back to a font — you don't normally need it, but it is there for custom systems that read text entities directly.
+A `Text` created inside a scene is cleaned up when the scene exits; `destroy()` is for removing an individual label early.
