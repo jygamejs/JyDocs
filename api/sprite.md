@@ -25,7 +25,7 @@ A sprite is whatever you point it at — a single image, a frame of an animation
 | Call | What it does |
 |------|--------------|
 | `new Sprite(x, y, image)` | Create a sprite at `(x, y)` showing `image` |
-| `sprite.animation.play("run")` | Play a clip — see [Image → Animation playback](image.md#animation-playback) |
+| `sprite.animation.play("run")` | Play a clip — see [Animation](#animation) |
 | `sprite.collides(other)` | Test overlap with another sprite or a rectangle |
 | `sprite.bounds` / `sprite.hitbox` | The rendered box / the collider box |
 | `sprite.destroy()` | Remove the sprite from the world |
@@ -256,28 +256,165 @@ player.animation.play("idle");
 player.animation.add("blink", { frames: [1, 2], fps: 4, loop: true });
 ```
 
-The controller separates **persistent intent** from **temporary actions** — see [Image → Animation playback](image.md#animation-playback) for the full API. The essentials:
+The first frame of the first clip is shown immediately on `add`/`addAll`, and its size resolves the sprite (unless a size is already fixed).
+
+The controller distinguishes **what should normally be playing** from **temporary actions that take control**. It owns playback, completion, and resumption — gameplay code just states intent:
+
+| Operation | Meaning |
+|-----------|---------|
+| `play(name)` | Persistent request: "this is the normal animation". Safe to call every frame; calling it with the active name does not restart. |
+| `playOnce(name)` | Temporary one-shot that plays to completion and then resumes the latest persistent request. Never loops, even if the clip is configured to loop. |
+| `playUntil(name, marker)` | Plays the named clip and pauses exactly at the marker — see [Marker-driven playback](#marker-driven-playback). |
+| `playAfter(name, marker)` | Plays the named clip starting at the position right **after** the marker. |
+| `pauseAt(name, marker)` | Arms the named (currently playing) clip to pause automatically when it reaches the marker. |
+| `resumeAt(name, marker)` | Positions the cursor at the marker and resumes playback from there. |
+| `play(name, { force: true })` | Higher-priority animation (death, stun, hit) that cannot be interrupted by ordinary `play()`. Resumes the persistent request on completion unless `{ resume: false }` holds the last frame. |
+| `queue(name)` | Plays after the current one-shot/queued animation. With nothing temporary active it starts immediately. |
+| `clearQueue()` | Drops pending queued clips; the currently playing one finishes, then normal playback resumes. |
+| `pause()` / `resume()` | Stop at the current playback position / continue exactly where playback stopped. `resume()` also clears any armed marker stop. |
+| `stop()` | Reset playback state (stops, rewinds to the first frame). |
+| `isAt(name, marker)` | Is the playback cursor exactly at the marker? |
+| `hasReached(name, marker)` | Has the cursor reached or passed the marker? |
+| `onComplete(cb)` | Fires once each time a finite playback reaches its end, with the completed clip name. |
+
+Playback state is queryable through the facade — no ECS internals needed:
+
+| Getter | Meaning |
+|--------|---------|
+| `current` | Name of the clip owning playback |
+| `frame` / `position` | Current playback position on the normalized timeline |
+| `progress` | Normalized progress through the clip (timing-aware; `1` when a finite clip completes) |
+| `isPlaying` | Playback is actively advancing |
+| `isPaused` | Intentionally stopped with a resumable cursor |
+| `isComplete` | A finite playback genuinely completed — a marker stop is never complete |
+| `marker` | Marker name at the current position, or `null` |
+
+### `play()` vs `playOnce()`
 
 ```js
-player.animation.play("run");                // persistent — safe every frame
-if (Input.pressed("jump")) player.animation.playOnce("jump");  // one-shot, then resume
-player.animation.play("hit", { force: true });                 // interrupts, then resumes
-player.animation.queue("attack2");           // play after the current one-shot
-player.animation.onComplete((name) => Audio.play("land"));
+update(dt) {
+  // Persistent: keep issuing it every frame.
+  player.animation.play(Input.down("move") ? "run" : "idle");
+
+  // Temporary: trigger on the one-frame input edge; the controller
+  // plays jump to completion, then resumes run/idle.
+  if (Input.pressed("jump")) {
+    player.animation.playOnce("jump");
+  }
+}
 ```
 
-State is readable without digging into internals:
+While the jump is playing, the `play("run")` / `play("idle")` requests keep updating in the background. When the jump finishes, the latest request takes over automatically.
 
-| Member | Meaning |
-|--------|---------|
-| `current` | The clip owning playback |
-| `playing` / `isPlaying` | Playback is advancing |
-| `frame` / `position` | Current position on the clip's timeline |
-| `progress` | Normalized `0`–`1` progress (timing-aware) |
-| `isPaused` / `isComplete` | Stopped with a resumable cursor / genuinely finished |
-| `marker` | Marker at the current position, or `null` |
+Do **not** try to express a one-shot with `play()` on a single-frame input edge:
 
-The first frame of the first clip is shown immediately on `add`/`addAll`, and its size resolves the sprite (unless a size is already fixed).
+```js
+// Broken: pressed() is a one-frame event, so the animation reverts to
+// run/idle on the very next frame. play() is persistent intent, not an action.
+player.animation.play(Input.pressed("jump") ? "jump" : "walk");
+```
+
+`Input.pressed()` is a one-frame event, while `play()` means "this is the persistent animation". Use `playOnce()` for temporary actions.
+
+### Forced animations
+
+```js
+if (enemyHit) {
+  player.animation.play("hit", { force: true });   // resumes normal on completion
+}
+player.animation.play("death", { force: true, resume: false }); // terminal: holds last frame
+```
+
+### Queues
+
+```js
+if (Input.pressed("attack")) {
+  player.animation.playOnce("attack1");
+  player.animation.queue("attack2");
+  player.animation.queue("attack3");
+}
+// attack1 → attack2 → attack3 → normal animation
+```
+
+### Completion events
+
+```js
+player.animation.playOnce("jump");
+player.animation.onComplete((name) => {
+  if (name === "jump") Audio.play("land");
+});
+```
+
+The callback fires once per finite clip that ends — including each queued clip, in order. It fires after the controller has advanced, so calling `play()` / `playOnce()` from inside the callback cannot corrupt playback state.
+
+### Marker-driven playback
+
+`playUntil` and `pauseAt` split an animation into semantic phases. The
+motivating example is a jump: play the anticipation and takeoff, pause at
+`"airborne"`, and only continue when gameplay says so.
+
+```js
+const anims = await Image.animate({
+  image: "jump.png",
+  sliceX: 5,
+  sliceY: 1,
+  jump: {
+    frames: 5,
+    timing: [0.08, 0.08, 0.20, 0.40, 0.08],
+    markers: { airborne: 2, landing: 4 },
+  },
+});
+
+// later, in gameplay:
+update(dt) {
+  if (Input.pressed("jump")) {
+    if (player.animation.isAt("jump", "airborne")) {
+      player.animation.resume();          // already airborne — finish the jump
+    } else {
+      player.animation.playUntil("jump", "airborne"); // 0 → 1 → 2, then PAUSED
+    }
+  }
+  if (player.isFalling) {
+    player.animation.resume();            // 2 → 3 → 4 → complete
+  }
+}
+```
+
+Markers are addressed **explicitly** by animation + marker — there is no global
+marker namespace, so the same name can exist in several clips without colliding
+and gameplay code stays self-documenting. `playUntil` plays the named clip and
+pauses exactly at the marker. The pause is detected even when a single `dt`
+would have jumped past it, and it is **not** completion:
+
+- `onComplete` does **not** fire,
+- queued animations do **not** advance,
+- the persistent request is preserved,
+
+so `resume()` continues from the exact paused position and only a genuine end
+of playback triggers normal completion/queue behavior.
+
+`pauseAt` does not start a new animation — it arms the named clip that is
+**currently playing**:
+
+```js
+player.animation.play("jump");
+player.animation.pauseAt("jump", "airborne");  // keeps playing until the marker, then pauses
+```
+
+`playAfter` and `resumeAt` reposition the cursor directly on the timeline:
+
+```js
+player.animation.playAfter("jump", "airborne"); // starts at the position after the marker
+player.animation.resumeAt("jump", "landing");   // positions at the marker and resumes
+```
+
+`playAfter("jump", "landing")` when `landing` is the final position ends the
+animation without wrapping to frame 0. Positioning never fires `onComplete`.
+
+`isAt` and `hasReached` let gameplay query where the cursor is: `isAt` is true
+only at the exact marker position (repeated source frames stay distinct), while
+`hasReached` stays true once playback has passed the marker, including after
+completion.
 
 ## Groups
 

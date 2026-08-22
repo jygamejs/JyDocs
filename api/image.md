@@ -205,7 +205,7 @@ jump: {
 
 The three options compose: `sequence` sets the structure, `timing` sets the
 pacing, and `markers` name the meaningful points. See
-[Marker-driven playback](#marker-driven-playback) for how gameplay uses them.
+[Marker-driven playback](sprite.md#marker-driven-playback) for how gameplay uses them.
 
 ### From individual files
 
@@ -267,10 +267,10 @@ You usually want this when you're going to hand the set to a sprite and drive it
 
 ```js
 const king = new Sprite(300, 300, "king");
-king.animation.play("walk");
+player.animation.play("walk");
 ```
 
-Without the shortcut you'd be forced to make the layout match the clip name. Pointing at a flat folder named after the character, you'd have to write `king: 4` — the clip would be called `"king"`, so `king.animation.play("king")` reads oddly. Renaming the folder to `assets/walk` makes no sense for a character. The usual fix is the per-animation subfolder — `assets/king/walk/1.png …` — which is better architecture and scales as the character gains `idle`, `run`, `jump`, and so on. The flat shortcut exists so you can keep the simple `assets/King` folder *and* call the clip `"walk"`.
+Without the shortcut you'd be forced to make the layout match the clip name. Pointing at a flat folder named after the character, you'd have to write `king: 4` — the clip would be called `"king"`, so `player.animation.play("king")` reads oddly. Renaming the folder to `assets/walk` makes no sense for a character. The usual fix is the per-animation subfolder — `assets/king/walk/1.png …` — which is better architecture and scales as the character gains `idle`, `run`, `jump`, and so on. The flat shortcut exists so you can keep the simple `assets/King` folder *and* call the clip `"walk"`.
 
 > **The shortcut is single-animation.** It only fires for exactly one entry that is a plain number — from a flat folder you get to name *that one clip*. More than one entry (or object entries) always goes back to one subfolder per animation: `walk: 4, idle: 2` from `assets/king` expects `assets/king/walk/…` *and* `assets/king/idle/…`. Keep one animation per flat folder, or give each animation its own subfolder.
 
@@ -556,165 +556,7 @@ this.skel.animation.play("v1");
 
 This is the whole loop for an animated character: load the set once, name it, build a sprite from the name, and drive it with `sprite.animation.play("v1")` — switching clips is just calling `play()` with another name from the set.
 
-## Animation playback
-
-`sprite.animation` distinguishes **what should normally be playing** from **temporary actions that take control**. The controller owns playback, completion, and resumption — gameplay code just states intent.
-
-| Operation | Meaning |
-|-----------|---------|
-| `play(name)` | Persistent request: "this is the normal animation". Safe to call every frame; calling it with the active name does not restart. |
-| `playOnce(name)` | Temporary one-shot that plays to completion and then resumes the latest persistent request. Never loops, even if the clip is configured to loop. |
-| `playUntil(name, marker)` | Plays the named clip and pauses exactly at the marker — see [Marker-driven playback](#marker-driven-playback). |
-| `playAfter(name, marker)` | Plays the named clip starting at the position right **after** the marker. |
-| `pauseAt(name, marker)` | Arms the named (currently playing) clip to pause automatically when it reaches the marker. |
-| `resumeAt(name, marker)` | Positions the cursor at the marker and resumes playback from there. |
-| `play(name, { force: true })` | Higher-priority animation (death, stun, hit) that cannot be interrupted by ordinary `play()`. Resumes the persistent request on completion unless `{ resume: false }` holds the last frame. |
-| `queue(name)` | Plays after the current one-shot/queued animation. With nothing temporary active it starts immediately. |
-| `clearQueue()` | Drops pending queued clips; the currently playing one finishes, then normal playback resumes. |
-| `pause()` / `resume()` | Stop at the current playback position / continue exactly where playback stopped. `resume()` also clears any armed marker stop. |
-| `stop()` | Reset playback state (stops, rewinds to the first frame). |
-| `isAt(name, marker)` | Is the playback cursor exactly at the marker? |
-| `hasReached(name, marker)` | Has the cursor reached or passed the marker? |
-| `onComplete(cb)` | Fires once each time a finite playback reaches its end, with the completed clip name. |
-
-Playback state is queryable through the facade — no ECS internals needed:
-
-| Getter | Meaning |
-|--------|---------|
-| `current` | Name of the clip owning playback |
-| `frame` / `position` | Current playback position on the normalized timeline |
-| `progress` | Normalized progress through the clip (timing-aware; `1` when a finite clip completes) |
-| `isPlaying` | Playback is actively advancing |
-| `isPaused` | Intentionally stopped with a resumable cursor |
-| `isComplete` | A finite playback genuinely completed — a marker stop is never complete |
-| `marker` | Marker name at the current position, or `null` |
-
-### `play()` vs `playOnce()`
-
-```js
-update(dt) {
-  // Persistent: keep issuing it every frame.
-  king.animation.play(Input.down("move") ? "run" : "idle");
-
-  // Temporary: trigger on the one-frame input edge; the controller
-  // plays jump to completion, then resumes run/idle.
-  if (Input.pressed("jump")) {
-    king.animation.playOnce("jump");
-  }
-}
-```
-
-While the jump is playing, the `play("run")` / `play("idle")` requests keep updating in the background. When the jump finishes, the latest request takes over automatically.
-
-Do **not** try to express a one-shot with `play()` on a single-frame input edge:
-
-```js
-// Broken: pressed() is a one-frame event, so the animation reverts to
-// run/idle on the very next frame. play() is persistent intent, not an action.
-king.animation.play(Input.pressed("jump") ? "jump" : "walk");
-```
-
-`Input.pressed()` is a one-frame event, while `play()` means "this is the persistent animation". Use `playOnce()` for temporary actions.
-
-### Forced animations
-
-```js
-if (enemyHit) {
-  king.animation.play("hit", { force: true });   // resumes normal on completion
-}
-king.animation.play("death", { force: true, resume: false }); // terminal: holds last frame
-```
-
-### Queues
-
-```js
-if (Input.pressed("attack")) {
-  king.animation.playOnce("attack1");
-  king.animation.queue("attack2");
-  king.animation.queue("attack3");
-}
-// attack1 → attack2 → attack3 → normal animation
-```
-
-### Completion events
-
-```js
-king.animation.playOnce("jump");
-king.animation.onComplete((name) => {
-  if (name === "jump") Audio.play("land");
-});
-```
-
-The callback fires once per finite clip that ends — including each queued clip, in order. It fires after the controller has advanced, so calling `play()` / `playOnce()` from inside the callback cannot corrupt playback state.
-
-### Marker-driven playback
-
-`playUntil` and `pauseAt` split an animation into semantic phases. The
-motivating example is a jump: play the anticipation and takeoff, pause at
-`"airborne"`, and only continue when gameplay says so.
-
-```js
-const anims = await Image.animate({
-  image: "jump.png",
-  sliceX: 5,
-  sliceY: 1,
-  jump: {
-    frames: 5,
-    timing: [0.08, 0.08, 0.20, 0.40, 0.08],
-    markers: { airborne: 2, landing: 4 },
-  },
-});
-
-// later, in gameplay:
-update(dt) {
-  if (Input.pressed("jump")) {
-    if (king.animation.isAt("jump", "airborne")) {
-      king.animation.resume();          // already airborne — finish the jump
-    } else {
-      king.animation.playUntil("jump", "airborne"); // 0 → 1 → 2, then PAUSED
-    }
-  }
-  if (player.isFalling) {
-    king.animation.resume();            // 2 → 3 → 4 → complete
-  }
-}
-```
-
-Markers are addressed **explicitly** by animation + marker — there is no global
-marker namespace, so the same name can exist in several clips without colliding
-and gameplay code stays self-documenting. `playUntil` plays the named clip and
-pauses exactly at the marker. The pause is detected even when a single `dt`
-would have jumped past it, and it is **not** completion:
-
-- `onComplete` does **not** fire,
-- queued animations do **not** advance,
-- the persistent request is preserved,
-
-so `resume()` continues from the exact paused position and only a genuine end
-of playback triggers normal completion/queue behavior.
-
-`pauseAt` does not start a new animation — it arms the named clip that is
-**currently playing**:
-
-```js
-king.animation.play("jump");
-king.animation.pauseAt("jump", "airborne");  // keeps playing until the marker, then pauses
-```
-
-`playAfter` and `resumeAt` reposition the cursor directly on the timeline:
-
-```js
-king.animation.playAfter("jump", "airborne"); // starts at the position after the marker
-king.animation.resumeAt("jump", "landing");   // positions at the marker and resumes
-```
-
-`playAfter("jump", "landing")` when `landing` is the final position ends the
-animation without wrapping to frame 0. Positioning never fires `onComplete`.
-
-`isAt` and `hasReached` let gameplay query where the cursor is: `isAt` is true
-only at the exact marker position (repeated source frames stay distinct), while
-`hasReached` stays true once playback has passed the marker, including after
-completion.
+Playing those clips — persistent vs one-shot playback, forced animations, queues, completion events, and marker-driven phases — is the job of the sprite's animation controller. See [Sprite → Animation](sprite.md#animation).
 
 ## Cache management — `get` / `has` / `remove` / `clear`
 
