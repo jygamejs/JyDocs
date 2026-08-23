@@ -270,23 +270,38 @@ The `"wasd"`/`"arrowkeys"` movement shorthand only expands inside bindings — `
 
 ### `pointer`
 
-The pointer facade — mouse, touch, and stylus collapsed into one position/button surface. It tracks the **primary** pointer (the first one down).
+The pointer facade — mouse, touch, and stylus collapsed into one position/button surface.
+
+`x`/`y`/`worldX`/`worldY` are **persistent**: they always reflect the latest known position of the primary pointer, even when no button is currently held. `down`/`pressed`/`released`/`delta` remain **active-pointer** state — they describe whether a pointer is currently interacting.
 
 | Member | Type | Meaning |
 |--------|------|---------|
-| `x`, `y` | `number` | Pointer position in canvas coordinates |
-| `worldX`, `worldY` | `number` | Position projected into world space (camera applied) |
+| `x`, `y` | `number` | Pointer position in canvas coordinates (persistent) |
+| `worldX`, `worldY` | `number` | Position projected into world space (camera applied, persistent) |
+| `hasPosition` | `boolean` | Whether a real pointer position has been received yet |
 | `down` | `boolean` | Primary button currently held |
 | `pressed` | `boolean` | Primary button went down this tick |
 | `released` | `boolean` | Primary button went up this tick |
 | `deltaX`, `deltaY` | `number` | Movement since last tick |
 | `pressure` | `number` | Pressure for touch/stylus, `0`–`1` |
 
+`x`/`y` default to `0` before the first pointer event. Because `(0, 0)` is a perfectly valid position (top-left corner), do **not** use `x !== 0 || y !== 0` to test for initialization — use `hasPosition`:
+
+```js
+const ptr = Input.pointer;
+if (ptr.hasPosition) {
+  this.effect.position.x = ptr.x;
+  this.effect.position.y = ptr.y;
+}
+```
+
 ```js
 if (Input.pointer.pressed) {
   this.shootAt(Input.pointer.worldX, Input.pointer.worldY);
 }
 ```
+
+`hasPosition` becomes `true` on the first `POINTER_MOVE` or `POINTER_DOWN` with valid coordinates (including `(0,0)`), stays `true` after `POINTER_UP`, and remains `true` for subsequent moves. `getPointers()` and `down`/`pressed`/`released` are unaffected — they still describe only **active** pointers.
 
 ### `wheel`
 

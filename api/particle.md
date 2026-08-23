@@ -69,6 +69,7 @@ effect.play();
 | `initializer` | `(particle, index) => void` | — | Per-particle hook called right after spawn, before modifiers |
 | `capacity` | `number` | auto | Maximum alive particles. Auto-estimated as `ceil(rate × maxLife × 1.5)` with a floor of `256` when omitted |
 | `backend` | `"cpu"` \| `"gpu"` | auto | Which simulation backend to use — see [Backend](#backend) |
+| `visual` | `ParticleVisual` | default | What the particle looks like — see [Visual](#visual) |
 
 #### `rate`
 
@@ -184,6 +185,60 @@ Which simulation backend drives the effect:
 | `"gpu"` | Particles simulate on the GPU — requires WebGL2 or WebGPU |
 
 The automatic choice picks GPU when the game's renderer supports it and CPU otherwise. Forcing `"gpu"` without a capable renderer throws; the automatic path falls back silently to CPU.
+
+#### `visual`
+
+What the particle looks like — a renderer-independent description. The engine chooses the appropriate backend renderer (Canvas, WebGL, WebGPU) for the visual.
+
+```js
+import { Particle, CircleParticleVisual, TextureParticleVisual } from "jygame";
+
+// default — solid quad, no visual needed
+Particle.create({ rate: 40, lifetime: 1 });
+
+// circle — size drives diameter, respects color/alpha
+Particle.create({
+  rate: 50,
+  lifetime: [3, 6],
+  shape: new CircleShape({ radius: 4 }),
+  visual: new CircleParticleVisual(),
+  modifiers: [new FadeModifier()],
+});
+
+// texture — static image, rotation still per-particle
+const img = new Image(); img.src = "/arrow.png";
+Particle.create({
+  rate: 40,
+  shape: new CircleShape({ radius: 5, speed: [200, 400] }),
+  visual: new TextureParticleVisual({
+    texture: img,
+    width: 39,
+    height: 8,
+    originX: 0,
+    originY: 0.5,
+  }),
+  initializer: (p) => { p.rotation = Math.atan2(p.vy, p.vx); },
+});
+```
+
+| Visual | What it does |
+|--------|--------------|
+| (default) | Solid quad — `size` drives side length, `r/g/b/alpha` drive color |
+| `new CircleParticleVisual({ radius? })` | Circle — `size` drives diameter (or `radius*2` if fixed radius given), respects `r/g/b/alpha` |
+| `new TextureParticleVisual({ texture, width?, height?, originX?, originY?, frameX?, frameY?, frameWidth?, frameHeight? })` | Textured quad — `texture` is an `HTMLImageElement`/canvas, `width`/`height` override `size` when given, `originX/Y` anchor, `frame*` for atlas |
+
+`visual` is shared for the whole effect — it describes rendering behaviour, not per-particle state. One `CircleParticleVisual` instance can drive thousands of particles with no extra allocations. Per-particle variation (rotation, color, alpha, size) still comes from `initializer` and `modifiers`:
+
+```js
+initializer: (p) => {
+  p.rotation = Math.atan2(p.vy, p.vx); // per-particle
+  p.r = 200 + Math.random()*55 | 0;    // per-particle color
+}
+```
+
+Do not set `p.texture`/`p.width`/`p.originX` manually for textured particles — configure the `TextureParticleVisual` once and let the initializer handle only dynamic values.
+
+Visuals are backend-neutral — the same `CircleParticleVisual` renders as a canvas arc, a WebGL disc (fragment discard), or a WebGPU circle.
 
 ## Controlling an effect
 
