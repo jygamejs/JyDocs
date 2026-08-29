@@ -29,7 +29,7 @@ Most of what you write against `Input` is one of these three. They all accept an
 
 ### `down(name)`
 
-`boolean` — whether the action or key is currently held down. Level-triggered: `true` for every frame the input stays held, `false` as soon as it is released.
+Whether the action or key is currently held down. Level-triggered: `true` for every frame the input stays held, `false` as soon as it is released.
 
 ```js
 if (Input.down("move")) { /* walking */ }
@@ -37,7 +37,7 @@ if (Input.down("move")) { /* walking */ }
 
 ### `pressed(name)`
 
-`boolean` — whether the action or key was pressed **this tick**. Edge-triggered: `true` for exactly one frame, the moment the input goes from up to down. Use it for one-shot events like jumping or firing — a `down()` check there would fire every frame the button is held.
+Whether the action or key was pressed **this tick**. Edge-triggered: `true` for exactly one frame, the moment the input goes from up to down. Use it for one-shot events like jumping or firing — a `down()` check there would fire every frame the button is held.
 
 ```js
 if (Input.pressed("jump")) { player.jump(); }
@@ -45,7 +45,7 @@ if (Input.pressed("jump")) { player.jump(); }
 
 ### `released(name)`
 
-`boolean` — whether the action or key was released this tick, the mirror image of `pressed()`. Useful for charge mechanics, or to detect the end of a press.
+Whether the action or key was released this tick, the mirror image of `pressed()`. Useful for charge mechanics, or to detect the end of a press.
 
 ```js
 if (Input.released("shoot")) { chargeShot(); }
@@ -57,11 +57,11 @@ The remaining query methods follow the same conventions. Raw identifier classifi
 
 ### `value(name)`
 
-`number` — the analog strength of the input, from `0` to `1`. For a digital action it is `1` while held and `0` otherwise; for analog inputs (gestures) it reflects magnitude. The natural partner to `axis()` when you need a scalar.
+The analog strength of the input, from `0` to `1`. For a digital action it is `1` while held and `0` otherwise; for analog inputs (gestures) it reflects magnitude. The natural partner to `axis()` when you need a scalar.
 
 ### `axis(name)`
 
-`{ x, y }` — the 2D direction of the input. This is how movement actions are read: bind `move` to the WASD/arrow shorthand and `axis("move")` gives you a normalized direction vector, diagonals included.
+The 2D direction of the input. This is how movement actions are read: bind `move` to the WASD/arrow shorthand and `axis("move")` gives you a normalized direction vector, diagonals included.
 
 ```js
 const dir = Input.axis("move");        // { x: 0, y: -1 } for up, etc.
@@ -153,14 +153,6 @@ Removes one binding from an action, passing the binding as a key identifier.
 
 ```js
 Input.removeBinding("shoot", "Space");
-```
-
-### `buffer(name, ms)`
-
-Arms an input buffer for the action for `ms` milliseconds. Use it for input leniency — jump buffering (a jump pressed just before landing still counts), or action-queue timing — where a press inside the window should be honored even if the game wasn't ready for it at the instant it happened. Coyote time is a gameplay rule built on top of movement state, not an input buffer.
-
-```js
-Input.buffer("jump", 120);   // give the jump press a 120ms grace window
 ```
 
 ### `bindings()`
@@ -305,100 +297,215 @@ The `"wasd"`/`"arrowkeys"` movement shorthand only expands inside bindings — `
 
 ## Events
 
-The three essential queries read **state** — what is true this frame. `events()` and `presses()` read **history** — what happened, and in what order, this tick.
+The basic input queries answer **state**: whether something is down, whether it was pressed this tick, or whether it was released. The event API exposes the other side of the input system: **what actually happened, and in what order**.
 
-They are the right tool when one frame can contain more than one press. Holding `W` then tapping `D` then `S` in the same tick still produces three distinct presses, and the order is preserved.
+Keyboard, mouse, touch, stylus, and gamepad input are normalized into a common event stream. Each event represents one input occurrence, so several inputs that arrive during the same tick remain distinct instead of being collapsed into a single state value.
+
+This distinction matters when input order is meaningful. If the player presses `W`, then `D`, then `S` before the next update, `Input.down()` can only tell you what is held at the end of the tick; the event stream can tell you that the presses happened in `W → D → S` order.
 
 ### `events()`
 
-`InputEvent[]` — every normalized input event this tick, frozen, in the order the engine received them. Useful for custom dispatch or logging; most games read `presses()` instead.
+Returns the normalized events collected during the current tick, in arrival order. The returned snapshot is read-only, so inspecting it does not consume or alter the input stream.
+
+Use `events()` when you need to work at the event level — for example, for custom input processing, diagnostics, or a feature that needs information that the higher-level state queries intentionally hide. Most gameplay code should prefer `pressed()`, `presses()`, or the temporal APIs below.
+
+A keyboard press might look like this:
 
 ```js
-for (const e of Input.events()) {
-  // e.type, e.device, e.timestamp, e.data
+{
+  type: "press",
+  device: "keyboard",
+  timestamp: 12345,
+  data: {
+    code: "KeyW",
+    key: "w",
+  },
 }
 ```
+
+The common event fields are:
+
+| Field | Meaning |
+|-------|---------|
+| `type` | What happened, such as a press, release, movement, or wheel event |
+| `device` | The source device, such as `keyboard`, `mouse`, `touch`, `pen`, or `gamepad` |
+| `timestamp` | A monotonic timestamp for when the input occurred |
+| `data` | Device-specific information such as a key code, character, mouse button, coordinates, wheel delta, or gamepad data |
+
+Action resolution can also associate an event with the action names it triggered. Those associations are what allow higher-level APIs such as `presses()`, `sequence()`, and `match()` to work from the same underlying stream.
+
+For example, custom input processing can inspect the stream directly:
+
+```js
+for (const event of Input.events()) {
+  if (event.device === "keyboard" && event.type === "press") {
+    console.log(event.data.code);
+  }
+}
+```
+
+`events()` is **per tick**. For events from previous ticks, use `history()`.
 
 ### `presses(name)`
 
-`object[]` — the presses for one action or raw identifier **this tick**, in order. For an action it returns the physical events that triggered it (with vector info for `VECTOR2`); for a raw key it returns the raw events.
+Returns the presses that matched one action or raw input during the current tick, preserving their order. This is useful when a single tick can contain more than one meaningful press.
+
+For a vector action, each entry also carries the direction associated with that press. That makes `presses()` particularly useful for games where several directional inputs can arrive before one update.
 
 ```js
-// action "move" bound to WASD — returns one entry per press this tick
-for (const p of Input.presses("move")) { /* ... */ }
-
-const snake = Input.presses("move"); // [{x:0,y:-1}, ...] in WASD→arrow order
+for (const press of Input.presses("move")) {
+  this.snake.turn(press.x, press.y);
+}
 ```
 
-`presses()` is the Snake-friendly query: one tick with `W → D → S` yields three entries, not just the last held key.
+For example, if a player quickly presses `W → D → S` before the next tick, a `move` action can expose three ordered presses rather than only the final direction. This is the useful distinction between `pressed("move")` and `presses("move")`: the former answers whether the action was pressed, while the latter gives you every matching press in that tick.
 
-This is useful when input order matters inside a single tick. For example, a
-Snake game can consume every turn without losing a quick series of inputs:
+`presses()` works with raw identifiers as well:
 
 ```js
-for (const turn of Input.presses("move")) {
-  this.snake.turn(turn.x, turn.y);
-}
+const presses = Input.presses("KeyW");
 ```
 
 ### `anyPressed()` / `anyDown()` / `anyReleased()`
 
-`boolean` — whether **any** keyboard press / hold / release happened this tick. Quick gates when you don't care which key.
+These are convenience queries for cases where you do not care which input was involved.
+
+- `anyPressed()` — whether any keyboard input was pressed this tick.
+- `anyDown()` — whether any keyboard input is currently held.
+- `anyReleased()` — whether any keyboard input was released this tick.
 
 ```js
-if (Input.anyPressed()) { /* a key went down */ }
+if (Input.anyPressed()) {
+  this.hideTitleScreen();
+}
 ```
 
 ### `Input.keyboard.lastPressed` / `lastReleased`
 
-The most recent keyboard press or release **this tick**, or `null` if none. A convenient shortcut when you only need the last event's `code`/`key`/`timestamp`.
+These expose the most recent keyboard press or release from the current tick. They are useful when you need the actual key information, but only care about the latest keyboard event rather than the whole stream.
 
 ```js
 const last = Input.keyboard.lastPressed;
-if (last) console.log(last.code, last.key);
+
+if (last) {
+  console.log(last.code); // "KeyW"
+  console.log(last.key);  // "w"
+}
 ```
 
-## History, queues & buffers
+Both are `null` when no corresponding keyboard event occurred during the current tick. The event's `code`, `key`, and `timestamp` are preserved.
 
-These read **across ticks**, not just this frame. They all consume the same ordered history the engine keeps for you — you don't need to store your own timestamps.
+## Temporal input
+
+The current-tick event stream is enough for ordinary input, but some mechanics need to remember input beyond the frame in which it happened. Jygame provides three related tools for that: **history**, **queues**, and **buffers**.
+
+They solve different problems:
+
+- `history()` lets you inspect recent events across ticks.
+- `queue()` / `next()` let you consume action presses one at a time in order.
+- `buffer()` / `buffered()` / `consumeBuffered()` let gameplay intentionally keep an input valid for a short time window.
+
+These APIs use the same normalized event stream and monotonic timestamps, so gameplay code does not need to build its own timestamp bookkeeping for common cases.
 
 ### `history(limitOrOptions)`
 
-`InputEvent[]` — the recent press history, oldest to newest. Without arguments it returns everything the engine retains (bounded, 128 by default). Pass a number for the last N, or `{ within: ms }` for the last window, or `{ limit: N }`.
+Returns the recent input history, oldest event first. History is bounded, so it is intended for recent input rather than an unbounded log. The default capacity is 128 events.
 
 ```js
-Input.history();              // all retained
-Input.history(5);             // last 5
-Input.history({ within: 300 }); // last 300ms
+Input.history();                 // all retained events
+Input.history(5);                // the last five events
+Input.history({ within: 300 });  // events from the last 300 ms
+Input.history({ limit: 10 });   // the last ten events
 ```
 
-History is **not** mutated by reading it. Consuming happens elsewhere.
+Reading history does not consume it. Multiple systems can inspect the same history independently.
 
-### `queue(name)` / `next(name)`
+History is especially useful when an action depends on inputs that happened over several ticks. `sequence()` uses this same temporal input model to recognize ordered combinations.
 
-An explicit per-action FIFO for inputs you want to handle **once** in order. `queue()` peeks, `next()` pops.
+### `queue(name)`
+
+Returns the pending presses for an action as an ordered FIFO. Presses are added automatically as they appear in the input stream, so gameplay can process them later without losing the order in which they happened.
+
+A queue is useful when an action should be handled **once per press**, even when several presses arrive before the gameplay code is ready to process them.
 
 ```js
-// press queue
-if (Input.next("jump")) player.jump();
+const pending = Input.queue("move");
 
-// vector queue — entries are {x, y}
-const step = Input.next("move"); // {x:0, y:-1} etc.
+for (const turn of pending) {
+  this.snake.turn(turn.x, turn.y);
+}
 ```
 
-Each action has its own queue (capacity 16). Presses are enqueued automatically from history; you just read them.
+Each action queue is bounded to 16 entries. Reading the queue does not remove entries; use `next()` when you want to consume them.
 
-### `buffer(name, ms)` / `buffered(name)` / `consumeBuffered(name)`
+### `next(name)`
 
-A time-window buffer: arm it, then check it.
+Removes and returns the oldest pending press for an action. When the queue is empty, it returns `null`.
 
 ```js
-Input.buffer("jump", 150);          // arm for 150ms
-if (Input.buffered("jump")) { /* ... */ }
-Input.consumeBuffered("jump");       // clear after using
+const jump = Input.next("jump");
+
+if (jump) {
+  this.player.jump();
+}
 ```
 
-`buffer()` arms the action for `ms` from now (uses the monotonic clock, not frame count). `buffered()` is `true` while the window is still live, `consumeBuffered()` returns `true` once and clears it. Unlike `history`, a buffer is intentional leniency — jump buffering, coyote time — not a log.
+For vector actions, the returned value includes the direction of the queued press:
+
+```js
+const turn = Input.next("move");
+
+if (turn) {
+  this.snake.turn(turn.x, turn.y);
+}
+```
+
+Use `queue()` when you need to inspect the pending entries as a collection; use `next()` when you want a simple consume-one-at-a-time loop.
+
+### `buffer(name, ms)`
+
+`buffer()` intentionally keeps an action valid for a limited amount of time. It is useful when an input should survive a short timing mismatch between the player's action and the gameplay state.
+
+For example, a platformer can let the player press jump slightly before landing. The jump input is remembered for a short window, and the movement code consumes it when the character becomes able to jump.
+
+```js
+Input.buffer("jump", 120);
+
+// Later, when the character is allowed to jump:
+if (Input.buffered("jump")) {
+  this.player.jump();
+  Input.consumeBuffered("jump");
+}
+```
+
+The duration is measured in milliseconds using the monotonic clock, not by subtracting one frame at a time. That means the buffer is based on real elapsed time and does not depend on the game's frame rate.
+
+`buffer()` is an explicit gameplay decision: it does not automatically buffer every input, and it does not modify `history()`. Coyote time, for example, is usually a movement rule based on when the character left the ground; it is not the same thing as an input buffer.
+
+### `buffered(name)`
+
+Checks whether the action currently has a live buffer.
+
+```js
+if (Input.buffered("jump")) {
+  this.player.jump();
+  Input.consumeBuffered("jump");
+}
+```
+
+It returns `false` once the buffer's time window has expired. Expiry is checked against the timestamp-based deadline, so it remains correct across irregular frame times.
+
+### `consumeBuffered(name)`
+
+Consumes a live buffer and clears it. It returns `true` when a live buffer was consumed and `false` when there was nothing to consume.
+
+```js
+if (canJump && Input.consumeBuffered("jump")) {
+  this.player.jump();
+}
+```
+
+A common pattern is to call `buffer()` when the player presses the action and `consumeBuffered()` when the gameplay state becomes ready to honor it. This keeps the timing rule separate from the actual gameplay action.
 
 ## Repeat
 
@@ -406,7 +513,7 @@ Input.consumeBuffered("jump");       // clear after using
 
 ### `repeated(name, { delay?, rate? })`
 
-`boolean` — `true` on the initial press and again every `rate` ms after `delay` ms, while the input stays down. Both options are per-call overrides; otherwise the global keyboard settings apply.
+Returns `true` on the initial press and again every `rate` ms after `delay` ms while the input stays down. Both options are per-call overrides; otherwise the global keyboard settings apply.
 
 ```js
 if (Input.repeated("moveLeft")) player.stepLeft();
@@ -597,7 +704,7 @@ Array shorthand is ergonomic; the object form adds `within` (max per-step gap, m
 
 ### `Input.sequence(sequence, options)`
 
-`boolean` — whether the ordered sequence was satisfied in the recent history.
+Returns `true` when the ordered sequence is satisfied in the recent input history.
 
 It accepts either a **combo name** or a **direct sequence**:
 
