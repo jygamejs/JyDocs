@@ -8,8 +8,10 @@ title: Input
 
 Everything you query goes by **name**, and the name can be either:
 
-- **an action** you bound — in a scene's `input` property or at runtime with `Input.bind()` — or
+- **an action** you bound — usually in a scene's `input` property, or at runtime with `Input.bind()` — or
 - **a raw device identifier** — a key like `"Space"` or `"KeyW"`, a mouse button like `"LEFT_MOUSE"`, and so on.
+
+For scene-local controls, the declarative `input` property is the usual approach. It gives physical inputs a stable meaning once, so gameplay code can work with names such as `jump`, `shoot`, and `move` instead of device-specific keys and buttons.
 
 ```js
 import { Input } from "jygame";
@@ -70,6 +72,41 @@ this.player.velocity.y = dir.y * this.speed;
 
 `axis()` returns `{ x: 0, y: 0 }` when nothing is held or the name isn't a vector. For how to bind keys to a direction — custom layouts, a single key per direction, mixing keyboards and gamepads — see [Vector actions (movement)](#vector-actions-movement).
 
+## Scene bindings
+
+A scene can declare its controls directly with an `input` property. This is the
+preferred form when the controls belong to that scene:
+
+```js
+class MyScene extends Scene {
+  input = {
+    idle: "KeyI",
+    jump: "Space",
+    shoot: "LEFT_MOUSE",
+    move: ["wasd", "arrowkeys"],
+  };
+}
+```
+
+The binding name is the semantic name used everywhere else in the input API.
+Multiple physical inputs can drive one action, so gameplay code does not need
+to know whether `shoot` came from a mouse, keyboard, or gamepad:
+
+```js
+class GameScene extends Scene {
+  input = {
+    shoot: ["LEFT_MOUSE", "KeyJ", "PAD_X"],
+  };
+
+  update() {
+    if (Input.pressed("shoot")) this.fire();
+  }
+}
+```
+
+This separation is intentional: `input` defines **what an input means**; the
+rest of the API lets gameplay decide what to do with that meaning.
+
 ## Runtime bindings
 
 Scenes declare their bindings declaratively in the `input` property, but you can also manage bindings from anywhere with `Input.bind()`. The binding **values** follow the exact same convention as a scene's `input` — strings, arrays, the `"wasd"`/`"arrowkeys"` movement shorthand, chord objects like `{ key: "Enter", ctrl: true }`, and gesture names.
@@ -120,7 +157,7 @@ Input.removeBinding("shoot", "Space");
 
 ### `buffer(name, ms)`
 
-Arms an input buffer for the action for `ms` milliseconds. Use it for input leniency — jump buffering (a jump pressed just before landing still counts), or action-queue timing — where a press inside the window should be honored even if the game wasn't ready for it at the instant it happened.
+Arms an input buffer for the action for `ms` milliseconds. Use it for input leniency — jump buffering (a jump pressed just before landing still counts), or action-queue timing — where a press inside the window should be honored even if the game wasn't ready for it at the instant it happened. Coyote time is a gameplay rule built on top of movement state, not an input buffer.
 
 ```js
 Input.buffer("jump", 120);   // give the jump press a 120ms grace window
@@ -266,79 +303,410 @@ Every physical key Jygame recognises — `"KeyW"`, `"Digit1"`, `"ArrowUp"`,
 
 The `"wasd"`/`"arrowkeys"` movement shorthand only expands inside bindings — `Input.bind("move", ["wasd", "arrowkeys"])` or a scene's `input`. `Input.pressed("wasd")` is not a movement query.
 
-## Mouse & touch
+## Events
 
-### `pointer`
+The three essential queries read **state** — what is true this frame. `events()` and `presses()` read **history** — what happened, and in what order, this tick.
 
-The pointer facade — mouse, touch, and stylus collapsed into one position/button surface.
+They are the right tool when one frame can contain more than one press. Holding `W` then tapping `D` then `S` in the same tick still produces three distinct presses, and the order is preserved.
 
-`x`/`y`/`worldX`/`worldY` are **persistent**: they always reflect the latest known position of the primary pointer, even when no button is currently held. `down`/`pressed`/`released`/`delta` remain **active-pointer** state — they describe whether a pointer is currently interacting.
+### `events()`
+
+`InputEvent[]` — every normalized input event this tick, frozen, in the order the engine received them. Useful for custom dispatch or logging; most games read `presses()` instead.
+
+```js
+for (const e of Input.events()) {
+  // e.type, e.device, e.timestamp, e.data
+}
+```
+
+### `presses(name)`
+
+`object[]` — the presses for one action or raw identifier **this tick**, in order. For an action it returns the physical events that triggered it (with vector info for `VECTOR2`); for a raw key it returns the raw events.
+
+```js
+// action "move" bound to WASD — returns one entry per press this tick
+for (const p of Input.presses("move")) { /* ... */ }
+
+const snake = Input.presses("move"); // [{x:0,y:-1}, ...] in WASD→arrow order
+```
+
+`presses()` is the Snake-friendly query: one tick with `W → D → S` yields three entries, not just the last held key.
+
+This is useful when input order matters inside a single tick. For example, a
+Snake game can consume every turn without losing a quick series of inputs:
+
+```js
+for (const turn of Input.presses("move")) {
+  this.snake.turn(turn.x, turn.y);
+}
+```
+
+### `anyPressed()` / `anyDown()` / `anyReleased()`
+
+`boolean` — whether **any** keyboard press / hold / release happened this tick. Quick gates when you don't care which key.
+
+```js
+if (Input.anyPressed()) { /* a key went down */ }
+```
+
+### `Input.keyboard.lastPressed` / `lastReleased`
+
+The most recent keyboard press or release **this tick**, or `null` if none. A convenient shortcut when you only need the last event's `code`/`key`/`timestamp`.
+
+```js
+const last = Input.keyboard.lastPressed;
+if (last) console.log(last.code, last.key);
+```
+
+## History, queues & buffers
+
+These read **across ticks**, not just this frame. They all consume the same ordered history the engine keeps for you — you don't need to store your own timestamps.
+
+### `history(limitOrOptions)`
+
+`InputEvent[]` — the recent press history, oldest to newest. Without arguments it returns everything the engine retains (bounded, 128 by default). Pass a number for the last N, or `{ within: ms }` for the last window, or `{ limit: N }`.
+
+```js
+Input.history();              // all retained
+Input.history(5);             // last 5
+Input.history({ within: 300 }); // last 300ms
+```
+
+History is **not** mutated by reading it. Consuming happens elsewhere.
+
+### `queue(name)` / `next(name)`
+
+An explicit per-action FIFO for inputs you want to handle **once** in order. `queue()` peeks, `next()` pops.
+
+```js
+// press queue
+if (Input.next("jump")) player.jump();
+
+// vector queue — entries are {x, y}
+const step = Input.next("move"); // {x:0, y:-1} etc.
+```
+
+Each action has its own queue (capacity 16). Presses are enqueued automatically from history; you just read them.
+
+### `buffer(name, ms)` / `buffered(name)` / `consumeBuffered(name)`
+
+A time-window buffer: arm it, then check it.
+
+```js
+Input.buffer("jump", 150);          // arm for 150ms
+if (Input.buffered("jump")) { /* ... */ }
+Input.consumeBuffered("jump");       // clear after using
+```
+
+`buffer()` arms the action for `ms` from now (uses the monotonic clock, not frame count). `buffered()` is `true` while the window is still live, `consumeBuffered()` returns `true` once and clears it. Unlike `history`, a buffer is intentional leniency — jump buffering, coyote time — not a log.
+
+## Repeat
+
+`pressed()` is an edge: `true` for exactly one tick. `repeated()` is the typematic version — the initial press plus timed repeats while held, like a key repeating in a text field.
+
+### `repeated(name, { delay?, rate? })`
+
+`boolean` — `true` on the initial press and again every `rate` ms after `delay` ms, while the input stays down. Both options are per-call overrides; otherwise the global keyboard settings apply.
+
+```js
+if (Input.repeated("moveLeft")) player.stepLeft();
+```
+
+The same mechanism is useful for controls that should fire repeatedly while a
+button is held. Per-call options make this useful for gameplay-specific rates
+without changing the global keyboard settings:
+
+```js
+if (Input.repeated("shoot", { delay: 150, rate: 80 })) {
+  this.fire();
+}
+```
+
+For example, a scene can keep the binding device-independent:
+
+```js
+input = {
+  shoot: ["LEFT_MOUSE", "KeyJ", "PAD_X"],
+};
+```
+
+`repeated("shoot")` then works with any of those inputs. Use `pressed()` when
+you want one shot per press; use `repeated()` when holding the control should
+produce additional activations.
+
+### `Input.keyboard.repeatDelay` / `repeatRate`
+
+Global repeat settings. `repeatDelay` is the initial wait (default `400` ms), and `repeatRate` is the interval (default `50` ms).
+
+```js
+Input.keyboard.repeatDelay = 300;
+Input.keyboard.repeatRate = 40;
+```
+
+Setting them propagates to existing actions. Per-call `{ delay, rate }` in `repeated()` overrides for that query only, and for an action it also adjusts the live `ActionState` if the key is already held and the next repeat hasn't yet been scheduled. Slow frames produce at most one repeat and stay aligned; browser `e.repeat` is ignored and `pressed()` remains edge-only.
+
+`repeated()` works for actions, chords (modifier release stops it), and raw identifiers (`"KeyA"`, `"LEFT_MOUSE"`, ...). `VECTOR2` actions never repeat.
+
+## Mouse & pointer
+
+Jygame keeps two related surfaces: the **mouse** and the **pointer**.
+
+- **`Input.pointer`** — the unified pointer: mouse, touch, and stylus collapsed into one primary position and button state. Use it for cross-device gameplay.
+- **`Input.mouse`** — mouse-only: position, buttons, wheel, and the browser behaviors — cursor and pointer lock. Use it when the semantics are specific to a mouse.
+
+Both derive from the same normalized pointer stream; there is no second pipeline.
+
+### `Input.mouse` — position
+
+Mouse position is mouse-specific — a touch contact does not move it — and it shares the coordinate logic of `Input.pointer`.
 
 | Member | Type | Meaning |
 |--------|------|---------|
-| `x`, `y` | `number` | Pointer position in canvas coordinates (persistent) |
-| `worldX`, `worldY` | `number` | Position projected into world space (camera applied, persistent) |
-| `hasPosition` | `boolean` | Whether a real pointer position has been received yet |
-| `down` | `boolean` | Primary button currently held |
-| `pressed` | `boolean` | Primary button went down this tick |
-| `released` | `boolean` | Primary button went up this tick |
-| `deltaX`, `deltaY` | `number` | Movement since last tick |
-| `pressure` | `number` | Pressure for touch/stylus, `0`–`1` |
-
-`x`/`y` default to `0` before the first pointer event. Because `(0, 0)` is a perfectly valid position (top-left corner), do **not** use `x !== 0 || y !== 0` to test for initialization — use `hasPosition`:
+| `x`, `y` | `number` | Viewport position (persistent) |
+| `worldX`, `worldY` | `number` | World position (camera applied, persistent) |
+| `hasPosition` | `boolean` | Whether a real mouse position has been received yet |
+| `deltaX`, `deltaY` | `number` | Movement since last tick (relative while pointer-locked) |
+| `wheel`, `wheelX` | `number` | Vertical / horizontal scroll delta this tick |
 
 ```js
-const ptr = Input.pointer;
-if (ptr.hasPosition) {
-  this.effect.position.x = ptr.x;
-  this.effect.position.y = ptr.y;
+if (Input.mouse.hasPosition) {
+  this.reticle.x = Input.mouse.worldX;
+  this.reticle.y = Input.mouse.worldY;
 }
+this.camera.panBy(Input.mouse.deltaX, Input.mouse.deltaY);
 ```
+
+`hasPosition` becomes `true` on the first mouse `POINTER_MOVE` or `POINTER_DOWN` (including `(0,0)`), stays `true` after release, and `(0,0)` is always a valid initialized position — use `hasPosition` to test for initialization, not `x !== 0`.
+
+### Buttons
+
+Each button exposes `down` / `pressed` / `released`, and the facade also offers a generic form. Either style works — the named properties are ergonomic for common cases, the generic form for dynamic handling. Both resolve to the same mouse state, and raw queries like `Input.pressed("LEFT_MOUSE")` remain compatible.
 
 ```js
-if (Input.pointer.pressed) {
-  this.shootAt(Input.pointer.worldX, Input.pointer.worldY);
-}
+if (Input.mouse.left.pressed) this.select();
+if (Input.mouse.right.down) this.aim();
+
+// generic
+if (Input.mouse.isDown("left")) { /* ... */ }
+if (Input.mouse.pressed("right")) { /* ... */ }
+Input.mouse.button("middle").down;
 ```
 
-`hasPosition` becomes `true` on the first `POINTER_MOVE` or `POINTER_DOWN` with valid coordinates (including `(0,0)`), stays `true` after `POINTER_UP`, and remains `true` for subsequent moves. `getPointers()` and `down`/`pressed`/`released` are unaffected — they still describe only **active** pointers.
+| Button | Members |
+|--------|---------|
+| `left`, `right`, `middle`, `back`, `forward` | `{ down, pressed, released }` |
+| `isDown(name)` / `pressed(name)` / `released(name)` | `boolean` by name (`"left"` etc., case-insensitive) |
+| `button(name)` | the same `{ down, pressed, released }` object or `null` |
 
-### `wheel`
+Button names accepted: `"left"`, `"right"`, `"middle"`, `"back"`, `"forward"` and their `"LEFT_MOUSE"` / `"MOUSE_LEFT"` aliases. `pressed`/`released` are edge-triggered for exactly one tick, `down` is level-triggered. Out-of-range queries return `false`/`null`.
 
-`number` — the vertical scroll delta accumulated **this tick**, reset every tick. Positive for scroll-down (typically). `Input.wheelX` is the horizontal counterpart.
+### Wheel
+
+`Input.mouse.wheel` / `wheelX` are the canonical per-tick wheel deltas, reset every tick. `Input.wheel` / `Input.wheelX` remain as compatibility aliases.
 
 ```js
-this.camera.zoom = Math.max(0.5, this.camera.zoom + Input.wheel * 0.1);
+this.camera.zoom += Input.mouse.wheel * 0.001;
 ```
 
-### Mouse buttons
+### Cursor
 
-Queried by name like keys:
-
-```js
-if (Input.pressed("LEFT_MOUSE"))  { /* left click */ }
-if (Input.down("RIGHT_MOUSE"))    { /* right held */ }
-```
-
-Button names: `"LEFT_MOUSE"` / `"MOUSE_LEFT"`, `"RIGHT_MOUSE"` / `"MOUSE_RIGHT"`, `"MIDDLE_MOUSE"` / `"MOUSE_MIDDLE"`, `"MOUSE_BACK"`, `"MOUSE_FORWARD"`.
-
-### `touch`
-
-The touch facade, for multi-touch. Unlike `pointer`, which collapses to the primary pointer, `touch` exposes every contact.
+The engine owns the browser cursor through `Input.mouse.cursor`. You don't write `canvas.style.cursor` yourself.
 
 | Member | Type | Meaning |
 |--------|------|---------|
-| `count` | `number` | Number of active touches |
-| `primary` | `object \| null` | The first touch: `{ id, x, y, down, justPressed, justReleased, pressure }` |
-| `contacts` | `array` | Every active touch in the same shape as `primary` |
+| `visible` | `boolean` | `false` hides the cursor (`"none"`), `true` restores it |
+| `style` | `string` | Any CSS cursor keyword — `"default"`, `"pointer"`, `"crosshair"`, … |
+| `image` | `string \| null` | Custom image URL (`"assets/cursor.png"`) or `null` |
+| `hotspot` | `{ x, y }` | Tip of the custom image, in pixels from the top-left |
+| `setImage(src, hotspot?)` | | Set image + optional hotspot |
+| `clearImage()` | | Remove the custom image |
+| `reset()` | | Restore `visible: true`, `style: "default"`, no image |
 
 ```js
-if (Input.touch.count === 2) {
-  // two fingers — pinch zone
+Input.mouse.cursor.visible = false;
+Input.mouse.cursor.style = "crosshair";
+Input.mouse.cursor.setImage("assets/cursor.png", { x: 4, y: 4 });
+Input.mouse.cursor.hotspot = { x: 0, y: 0 };
+```
+
+Custom images use the browser's `cursor: url(...)` path: `url("assets/cursor.png") 4 4, <style>`. Browser cursors have practical limits — allowed image size, hotspot clamping, and high-DPI sharpness vary by browser. For full control (size, animation, high-DPI fidelity) the abstraction is designed to accommodate an engine-rendered sprite later without changing the public API — custom cursors are deferrable by design.
+
+Cursor state is desired state; the desired cursor is re-applied automatically after pointer lock is released.
+
+### Pointer lock
+
+Pointer lock is a first-class, stateful engine capability — not a raw DOM call. It targets the game's canvas and is subject to the browser's user-activation rules (it typically only succeeds when called from a valid user interaction such as a click).
+
+| Member | Type | Meaning |
+|--------|------|---------|
+| `isLocked` | `boolean` | Whether the pointer is currently locked |
+| `lock()` | `Promise<boolean>` | Request lock — resolves `true` on success, `false` on rejection |
+| `unlock()` | `void` | Release lock |
+
+```js
+if (Input.mouse.left.pressed) await Input.mouse.pointerLock.lock();
+if (Input.mouse.pointerLock.isLocked) this.player.yaw += Input.mouse.deltaX * 0.2;
+Input.mouse.pointerLock.unlock();
+```
+
+While locked, `Input.mouse.x`/`y` stay at the last known absolute position and `deltaX`/`deltaY` become relative `movementX`/`movementY`. `Input.pointer` behaves the same — `x`/`y` frozen, `delta` relative — and `hasPosition` is preserved. The engine listens to `pointerlockchange`/`pointerlockerror`, so an external exit (user pressing Esc, tab blur, or the browser denying the request) is synchronized and never leaves `isLocked` as `true` on failure. `Game` cleans up listeners and exits lock on destroy.
+
+## Sequences, combos & matchers
+
+*`input` gives raw inputs meaning; `combo` gives ordered combinations of those meanings a name. Jygame provides the mechanism, not fighting-game semantics like Forward/Back, quarter-circles, or facing.*
+
+### Defining meanings — `input`
+
+Scenes declare what physical inputs mean. This stays the primary way to give input semantics:
+
+```js
+class FightingScene extends Scene {
+  input = {
+    punch: ["KeyJ", "PAD_X"],
+    kick:  ["KeyK", "PAD_A"],
+    down:  "KeyS",
+    right: "KeyD",
+  };
 }
 ```
+
+After this, `"punch"` means `KeyJ` *or* `PAD_X` — one semantic name, multiple physical sources.
+
+### Defining order — `combo`
+
+A scene can also declare named **ordered** combinations of those meanings:
+
+```js
+class FightingScene extends Scene {
+  input = {
+    punch: ["KeyJ", "PAD_X"],
+    down:  "KeyS",
+    right: "KeyD",
+  };
+  combo = {
+    hadoken: ["down", "right", "punch"],
+    // object form with options
+    hadoken2: { sequence: ["down", "right", "punch"], within: 300, consume: true },
+  };
+}
+```
+
+`input` says *these physical inputs are the action `punch`*; `combo` says *these already-semantic inputs form the sequence named `hadoken`*. A combo consumes action names, not device details, so `hadoken` works regardless of whether `punch` came from a key or a pad.
+
+Array shorthand is ergonomic; the object form adds `within` (max per-step gap, ms) and `consume` (whether matching consumes the inputs for that matcher). Both are optional.
+
+### `Input.sequence(sequence, options)`
+
+`boolean` — whether the ordered sequence was satisfied in the recent history.
+
+It accepts either a **combo name** or a **direct sequence**:
+
+```js
+if (Input.sequence("hadoken")) fighter.hadoken();
+if (Input.sequence(["down", "right", "punch"])) fighter.hadoken();
+
+// raw, mixed — still valid
+Input.sequence(["KeyW", "KeyD", "Space"]);
+Input.sequence(["KeyW", "move", "PAD_A"]);
+```
+
+A string first resolves as a **combo** in the active context (priority order, like `pressed()`); if no combo matches, it is treated as a single-step sequence of that name (so `Input.sequence("punch")` works without a combo). Raw identifiers and action names can be mixed freely.
+
+**Timing** is per-step, using the monotonic event timestamps:
+
+```js
+Input.sequence(["down", "right", "punch"], { within: 300 });
+```
+
+`within: 300` means every consecutive pair must be at most 300 ms apart. It is not frame count and no timers are involved.
+
+**Consumption** does not mutate `Input.history()` — it is tracked per matcher:
+
+```js
+Input.sequence("hadoken", { consume: true });
+```
+
+```js
+combo = {
+  hadoken: { sequence: ["down","right","punch"], within: 300, consume: true }
+};
+```
+
+History stays intact so multiple matchers can observe the same stream. Overlapping sequences like `A B A` where both `["A","B"]` and `["B","A"]` are valid remain valid — each matcher keeps its own progress and consumed set. History itself is bounded (128 by default) and the oldest entries are evicted naturally.
+
+`Input.sequence()` resolves each step through the same action/raw logic as `pressed()` — no duplicate binding system — and participates in context priority and scene cleanup. A combo belongs to the context that declared it and disappears when that scene exits.
+
+### `Input.match(predicate)`
+
+The escape hatch for **state-dependent** semantics. Some games need `"forward"` to mean different physical inputs depending on the fighter's facing — Jygame must not encode that, but it should give you a way to express it.
+
+```js
+const forward = Input.match(event => {
+  if (event.action !== "left" && event.action !== "right") return false;
+  const dir = event.action === "right" ? 1 : -1;
+  return dir === fighter.facing;
+});
+
+if (Input.sequence(["down", forward, "punch"])) fighter.hadoken();
+```
+
+A more complete fighting-game setup can keep `forward` and `back` out of the
+engine entirely. The game decides what those terms mean from its own state:
+
+```js
+input = {
+  left: ["KeyA", "PAD_DPAD_LEFT"],
+  right: ["KeyD", "PAD_DPAD_RIGHT"],
+  punch: ["KeyJ", "PAD_X"],
+  down: ["KeyS", "PAD_DPAD_DOWN"],
+};
+
+const forward = Input.match(event => {
+  if (!event.matches("left") && !event.matches("right")) return false;
+
+  const direction = event.matches("right") ? 1 : -1;
+  return direction === fighter.facing;
+});
+
+if (Input.sequence(["down", forward, "punch"], { within: 300 })) {
+  fighter.hadoken();
+}
+```
+
+The important boundary is that Jygame knows what `left`, `right`, `down`, and
+`punch` mean, and knows how to match an ordered sequence. The meaning of
+`forward` remains game logic because it depends on `fighter.facing`.
+
+`Input.match()` takes a **function** and returns an opaque matcher that can be
+used as a sequence element alongside strings.
+
+- The predicate receives the **historical candidate event** — not just current state — with `type`, `device`, `timestamp`, `data` (`code`, `key`, `button`, ...), plus `action`/`name` (the primary matching action), `actions` (all matching actions), and a `matches(name)` helper. The original timestamp is preserved, so a state-dependent test can evaluate the input that actually occurred in the sequence.
+- Keep the predicate stateless — progress, timing, and consumption belong to `Input.sequence`, not the matcher.
+- `Input.match("forward")` throws `TypeError` — the argument must be a function.
+- If the predicate throws, the error propagates — it is not swallowed to `false`.
+- Matchers are for **programmatic** `Input.sequence([...])`; do not put executable predicates inside declarative `combo` — keep `combo` serializable.
+
+Together this gives you the layered model:
+
+```text
+physical input
+      ↓
+     input          (meaning)
+      ↓
+     combo          (order)
+      ↓
+ Input.match()     (runtime-dependent meaning, when needed)
+      ↓
+  gameplay behavior
+```
+
+Jygame stops there — facing, quarter-circles, diagonals, attack priority, and cancel windows are game-level semantics you implement with these primitives.
 
 ## Gamepad
+
+You can usually stay at the action level and let the same binding work across
+keyboard, mouse, and controller. Use the structured facade when you need
+controller-specific data, multiple pads, or analog controls.
 
 Controllers are read through the Web Gamepad API and exposed on the facade
 both by name and through `Input.gamepad`. The engine never needs to know which
@@ -623,4 +991,4 @@ raw.coordinateSystem; // pointer → canvas/world transforms
 raw.actionMap;        // the active context's action map
 ```
 
-It is `null` until the game creates its input system. Reaching for `raw` is rare — it exists so the facade never has to be a wall.
+It is `null` until the game creates its input system. Reaching for `raw` is uncommon; prefer the public facade unless you are integrating with an engine-level system.
