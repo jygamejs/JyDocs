@@ -21,6 +21,7 @@ const game = new Game({
   parent: document.body,   // where the canvas is inserted
   width: 800,              // canvas width, in pixels
   height: 600,             // canvas height, in pixels
+  backgroundColor: null,   // canvas clear color — applied in every scene by default
   fps: 60,                 // fixed simulation ticks per second
   maxTicks: 5,             // how many of those ticks we'll catch up on per frame
   debug: false,            // opt-in: diagnostics overlay + debug workspace
@@ -76,6 +77,36 @@ With it enabled, the engine collects timing and performance metrics — frames, 
 
 - **`` ` `` — the in-game overlay.** Press the backtick key to toggle a live overlay on top of your game showing performance graphs, timelines, and event views.
 - **`Ctrl + F3` — the debug panel.** Opens a more detailed debug workspace in a separate window, where you can browse frame history, the world, and your systems.
+
+### `backgroundColor`
+
+The color the canvas is cleared to at the start of every frame, before any scene draws. It is part of the **rendering pipeline** — every scene inherits it automatically, so you set it once on the `Game` and every frame, in every scene, starts from the same background.
+
+`null` (the default) leaves the canvas transparent — the page behind it shows through and each `clear()` simply erases the previous frame. Set it to any CSS color to get a solid backdrop:
+
+```js
+const game = new Game({
+  backgroundColor: "#0e0e1a",
+});
+
+const game2 = new Game({
+  backgroundColor: "rgb(14, 14, 26)",
+});
+
+const game3 = new Game({
+  backgroundColor: "rgba(14, 14, 26, 0.8)",
+});
+```
+
+Like `imageSmoothing`, it is global and pipeline-level: you don't set it per scene and you don't fill the canvas yourself in `render()`. The engine applies it in `clear()` on every backend (Canvas 2D `fillRect`, WebGL `clearColor`, WebGPU `clearValue`), and a `RenderConfig` per world carries it for WebGL/WebGPU so the clear stays consistent even when scenes change or the renderer falls back.
+
+It is also live — change it at runtime and the next frame uses the new color:
+
+```js
+game.backgroundColor = "#1a2a4a";
+```
+
+`backgroundColor` accepts any CSS color string — hex (`"#RRGGBB"`, `"#RGB"`, `"#RRGGBBAA"`), `rgb(...)`, or `rgba(...)`. An invalid string is treated as transparent. Scenes that need a different backdrop can still override it locally via their own `RenderConfig` or by drawing a full-screen primitive, but the `Game` value remains the default.
 
 ### `imageSmoothing`
 
